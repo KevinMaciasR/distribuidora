@@ -1,0 +1,460 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --primary: #111827;
+    --primary-light: #1f2937;
+    --background: #f3f4f6;
+    --card: #ffffff;
+    --text: #111827;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+
+    --success: #15803d;
+    --success-bg: #dcfce7;
+
+    --warning: #a16207;
+    --warning-bg: #fef9c3;
+
+    --danger: #b91c1c;
+    --danger-bg: #fee2e2;
+
+    --info: #1d4ed8;
+    --info-bg: #dbeafe;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: var(--background);
+    color: var(--text);
+    min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+}
+
+button {
+    border: none;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* HEADER */
+
+.app-header {
+    background: var(--primary);
+    color: white;
+    padding: 17px 16px;
+}
+
+.app-header h1 {
+    font-size: 21px;
+}
+
+.app-header p {
+    margin-top: 4px;
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+/* CONTENIDO */
+
+.main-content {
+    padding: 16px;
+    padding-bottom: 90px;
+    max-width: 700px;
+    margin: auto;
+}
+
+/* TARJETAS */
+
+.card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 14px;
+}
+
+/* ESTADO */
+
+.status-bar {
+    padding: 11px 13px;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.status-success {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.status-warning {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.status-danger {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.status-info {
+    background: var(--info-bg);
+    color: var(--info);
+}
+
+/* INVENTARIO */
+
+.inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.inventory-item {
+    background: #f9fafb;
+    border-radius: 12px;
+    padding: 13px;
+}
+
+.inventory-item .label {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.inventory-item .number {
+    display: block;
+    font-size: 27px;
+    font-weight: bold;
+    margin-top: 5px;
+}
+
+.inventory-item .sub {
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.inventory-total {
+    margin-top: 10px;
+    padding: 13px;
+    border-radius: 12px;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.inventory-total strong {
+    font-size: 23px;
+}
+
+/* BOTONES */
+
+.primary-button {
+    width: 100%;
+    background: var(--primary);
+    color: white;
+    border-radius: 14px;
+    padding: 17px;
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 14px;
+}
+
+.secondary-button {
+    width: 100%;
+    background: white;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    font-weight: bold;
+}
+
+.danger-button {
+    width: 100%;
+    background: var(--danger);
+    color: white;
+    border-radius: 12px;
+    padding: 14px;
+    font-weight: bold;
+}
+
+/* ACCIONES */
+
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.quick-action {
+    background: white;
+    border-radius: 14px;
+    padding: 17px 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+}
+
+.quick-action .icon {
+    display: block;
+    font-size: 25px;
+    margin-bottom: 7px;
+}
+
+.quick-action span {
+    font-size: 13px;
+}
+
+/* FORMULARIOS */
+
+.form-group {
+    margin-bottom: 14px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+.form-control {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 13px;
+    font-size: 16px;
+    background: white;
+}
+
+.form-control:focus {
+    outline: 2px solid #9ca3af;
+}
+
+textarea.form-control {
+    min-height: 80px;
+    resize: vertical;
+}
+
+/* MOVIMIENTOS */
+
+.movement-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.movement-button {
+    width: 100%;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+}
+
+.movement-button .icon {
+    font-size: 26px;
+}
+
+.movement-button strong {
+    display: block;
+    font-size: 14px;
+}
+
+.movement-button small {
+    display: block;
+    color: var(--muted);
+    margin-top: 3px;
+}
+
+/* LISTAS */
+
+.list {
+    display: grid;
+    gap: 9px;
+}
+
+.list-item {
+    background: white;
+    border-radius: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+}
+
+.list-item-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.list-item-title {
+    font-weight: bold;
+}
+
+.list-item-sub {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+/* BADGES */
+
+.badge {
+    display: inline-block;
+    border-radius: 20px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.badge-success {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.badge-warning {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.badge-danger {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+/* NAVEGACIÓN */
+
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 68px;
+    background: white;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    z-index: 100;
+}
+
+.bottom-nav button {
+    background: white;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+}
+
+.bottom-nav button .icon {
+    font-size: 21px;
+}
+
+.bottom-nav button span {
+    font-size: 10px;
+}
+
+.bottom-nav button.active {
+    color: var(--primary);
+    font-weight: bold;
+}
+
+/* TITULOS */
+
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.back-button {
+    background: white;
+    border: 1px solid var(--border);
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    font-size: 18px;
+}
+
+.page-header h2 {
+    font-size: 20px;
+}
+
+/* MODAL */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: flex-end;
+    z-index: 200;
+}
+
+.modal {
+    background: white;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    padding: 20px;
+}
+
+/* VACÍO */
+
+.empty-state {
+    text-align: center;
+    padding: 35px 15px;
+    color: var(--muted);
+}
+
+.empty-state .icon {
+    font-size: 40px;
+    margin-bottom: 10px;
+}
+
+/* RESPONSIVE */
+
+@media (min-width: 700px) {
+
+    .main-content {
+        padding-top: 25px;
+    }
+
+    .modal-overlay {
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal {
+        width: 500px;
+        border-radius: 18px;
+    }
+}
