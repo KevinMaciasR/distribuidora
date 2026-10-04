@@ -9,22 +9,42 @@ import {
     actualizarInventario
 } from './inventario.js';
 
+import {
+    obtenerCliente,
+    modificarPendienteCliente
+} from './clientes.js';
+
+
+/* =====================================================
+   TIPOS DE MOVIMIENTO
+===================================================== */
 
 export const TIPOS_MOVIMIENTO = {
 
-    ENTREGA_CLIENTE: 'ENTREGA A CLIENTE',
+    ENTREGA_CLIENTE:
+        'ENTREGA A CLIENTE',
 
-    RETIRO_CLIENTE: 'RETIRO DE CLIENTE',
+    RETIRO_CLIENTE:
+        'RETIRO DE CLIENTE',
 
-    ENTREGA_RETIRO: 'ENTREGA + RETIRO',
+    ENTREGA_RETIRO:
+        'ENTREGA + RETIRO',
 
-    SALIDA_PLANTA: 'SALIDA A PLANTA',
+    SALIDA_PLANTA:
+        'SALIDA A PLANTA',
 
-    REGRESO_PLANTA: 'REGRESO DE PLANTA',
+    REGRESO_PLANTA:
+        'REGRESO DE PLANTA',
 
-    TRASLADO: 'TRASLADO ENTRE CAMIONES'
+    TRASLADO:
+        'TRASLADO ENTRE CAMIONES'
+
 };
 
+
+/* =====================================================
+   UUID
+===================================================== */
 
 function uuid() {
 
@@ -32,634 +52,1067 @@ function uuid() {
         return crypto.randomUUID();
     }
 
-    return `${Date.now()}-${Math.random()
-        .toString(16)
-        .slice(2)}`;
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 
-function fechaActual() {
-    return new Date().toISOString();
-}
-
+/* =====================================================
+   OBTENER CAMIÓN
+===================================================== */
 
 async function obtenerCamion(nombre) {
 
-    const ubicacion = await obtener(
-        'inventario',
-        nombre
-    );
+    const camion =
+        await obtener(
+            'inventario',
+            nombre
+        );
 
-    if (!ubicacion) {
+
+    if (
+        !camion ||
+        (
+            nombre !== UBICACIONES.ROJO &&
+            nombre !== UBICACIONES.BLANCO
+        )
+    ) {
+
         throw new Error(
             `No existe el camión ${nombre}.`
         );
+
     }
 
-    return ubicacion;
+
+    return camion;
 }
 
 
-async function validarCamion(
+/* =====================================================
+   VALIDAR CANTIDADES
+===================================================== */
+
+function validarCantidad(
+    llenos,
+    vacios
+) {
+
+    if (
+        !Number.isInteger(llenos) ||
+        !Number.isInteger(vacios) ||
+        llenos < 0 ||
+        vacios < 0
+    ) {
+
+        throw new Error(
+            'Las cantidades deben ser números enteros mayores o iguales a 0.'
+        );
+
+    }
+
+}
+
+
+/* =====================================================
+   VALIDAR EXISTENCIA EN CAMIÓN
+===================================================== */
+
+function validarCamion(
     camion,
     llenos = 0,
     vacios = 0
 ) {
 
-    const data = await obtenerCamion(camion);
-
-    if (llenos > data.llenos) {
-
-        throw new Error(
-            `El Camión ${camion} solo tiene ${data.llenos} cilindros llenos disponibles.`
-        );
-    }
-
-    if (vacios > data.vacios) {
+    if (
+        llenos >
+        (camion.llenos || 0)
+    ) {
 
         throw new Error(
-            `El Camión ${camion} solo tiene ${data.vacios} cilindros vacíos disponibles.`
+            `El camión no tiene suficientes cilindros llenos. Disponibles: ${camion.llenos || 0}.`
         );
+
     }
+
+
+    if (
+        vacios >
+        (camion.vacios || 0)
+    ) {
+
+        throw new Error(
+            `El camión no tiene suficientes cilindros vacíos. Disponibles: ${camion.vacios || 0}.`
+        );
+
+    }
+
 }
 
 
+/* =====================================================
+   VALIDAR CLIENTE
+===================================================== */
+
 async function validarCliente(
-    idCliente,
-    cantidad
+    idCliente
 ) {
 
-    const cliente = await obtener(
-        'clientes',
-        idCliente
-    );
+    const cliente =
+        await obtenerCliente(
+            idCliente
+        );
+
 
     if (!cliente) {
-        throw new Error(
-            'El cliente no existe.'
-        );
-    }
-
-    if (cliente.estado !== 'ACTIVO') {
-        throw new Error(
-            'El cliente está inactivo.'
-        );
-    }
-
-    if (cantidad > (cliente.pendientes_actuales || 0)) {
 
         throw new Error(
-            `El cliente solo tiene ${cliente.pendientes_actuales || 0} cilindros pendientes.`
+            'El cliente seleccionado no existe.'
         );
+
     }
+
+
+    if (
+        cliente.estado !== 'ACTIVO'
+    ) {
+
+        throw new Error(
+            'El cliente seleccionado está inactivo.'
+        );
+
+    }
+
 
     return cliente;
 }
 
 
-async function modificarPendientesCliente(
+/* =====================================================
+   VALIDAR PENDIENTE DEL CLIENTE
+===================================================== */
+
+async function validarPendienteCliente(
     idCliente,
     cantidad
 ) {
 
-    const cliente = await obtener(
-        'clientes',
-        idCliente
-    );
-
-    if (!cliente) {
-        throw new Error('Cliente no encontrado.');
-    }
-
-    const nuevo = {
-        ...cliente,
-        pendientes_actuales:
-            (cliente.pendientes_actuales || 0) +
-            cantidad
-    };
-
-    if (nuevo.pendientes_actuales < 0) {
-        throw new Error(
-            'Los pendientes del cliente no pueden ser negativos.'
+    const cliente =
+        await validarCliente(
+            idCliente
         );
+
+
+    const pendiente =
+        cliente.pendientes_actuales || 0;
+
+
+    if (
+        cantidad >
+        pendiente
+    ) {
+
+        throw new Error(
+            `El cliente tiene ${pendiente} cilindros pendientes. No puedes retirar ${cantidad}.`
+        );
+
     }
 
-    await guardar(
-        'clientes',
-        nuevo
-    );
 
-    await actualizarInventario(
-        UBICACIONES.CLIENTES,
-        {
-            pendientes:
-                nuevo.pendientes_actuales
-        }
-    );
+    return cliente;
 }
 
+
+/* =====================================================
+   CREAR MOVIMIENTO
+===================================================== */
 
 async function crearMovimiento(base) {
 
     const movimiento = {
 
-        id_movimiento: uuid(),
+        id_movimiento:
+            uuid(),
 
-        fecha_hora: fechaActual(),
+        fecha_hora:
+            new Date().toISOString(),
 
-        ...base,
+        estado:
+            'ACTIVO',
 
-        estado: 'ACTIVO',
+        created_at:
+            new Date().toISOString(),
 
-        fecha_creacion: fechaActual(),
+        dispositivo:
+            'MOVIL',
 
-        fecha_modificacion: fechaActual(),
+        sync_estado:
+            'PENDIENTE',
 
-        dispositivo_id: 'MOVIL',
+        ...base
 
-        sync_estado: 'PENDIENTE'
     };
+
 
     await guardar(
         'movimientos',
         movimiento
     );
 
+
     return movimiento;
 }
 
 
-/* =========================
+/* =====================================================
    ENTREGA A CLIENTE
-========================= */
+===================================================== */
 
 export async function entregaCliente({
+
     idCliente,
+
     camion,
-    llenos,
+
+    cantidad,
+
     observacion = ''
+
 }) {
 
-    llenos = Number(llenos);
+    cantidad =
+        Number(cantidad);
 
-    if (llenos <= 0) {
+
+    if (
+        !Number.isInteger(cantidad) ||
+        cantidad <= 0
+    ) {
+
         throw new Error(
-            'Indica una cantidad válida de cilindros llenos.'
+            'La cantidad entregada debe ser un número entero mayor que 0.'
         );
+
     }
 
-    await validarCamion(
-        camion,
-        llenos,
+
+    const camionActual =
+        await obtenerCamion(
+            camion
+        );
+
+
+    validarCamion(
+        camionActual,
+        cantidad,
         0
     );
 
-    await validarClienteExistente(idCliente);
 
-    const cam = await obtenerCamion(camion);
+    await validarCliente(
+        idCliente
+    );
+
+
+    /*
+       Primero modificamos el camión.
+    */
 
     await actualizarInventario(
         camion,
         {
-            llenos: cam.llenos - llenos
+            llenos:
+                (camionActual.llenos || 0) -
+                cantidad
         }
     );
 
-    await modificarPendientesCliente(
+
+    /*
+       Después aumentamos el pendiente real del cliente.
+
+       Esta función también actualiza CLIENTES.pendientes
+       sumando todos los clientes.
+    */
+
+    await modificarPendienteCliente(
         idCliente,
-        llenos
+        cantidad
     );
 
+
     return crearMovimiento({
-        tipo: TIPOS_MOVIMIENTO.ENTREGA_CLIENTE,
-        id_cliente: idCliente,
-        camion_origen: camion,
-        camion_destino: null,
-        llenos,
-        vacios: 0,
+
+        tipo:
+            TIPOS_MOVIMIENTO.ENTREGA_CLIENTE,
+
+        id_cliente:
+            idCliente,
+
+        camion_origen:
+            camion,
+
+        camion_destino:
+            null,
+
+        llenos:
+            cantidad,
+
+        vacios:
+            0,
+
         observacion
+
     });
 }
 
 
-/* =========================
+/* =====================================================
    RETIRO DE CLIENTE
-========================= */
+===================================================== */
 
 export async function retiroCliente({
     idCliente,
     camion,
-    vacios,
-    observacion = ''
-}) {
-
-    vacios = Number(vacios);
-
-    if (vacios <= 0) {
-        throw new Error(
-            'Indica una cantidad válida de cilindros vacíos.'
-        );
-    }
-
-    const cliente = await validarCliente(
-        idCliente,
-        vacios
-    );
-
-    const cam = await obtenerCamion(camion);
-
-    await modificarPendientesCliente(
-        idCliente,
-        -vacios
-    );
-
-    await actualizarInventario(
-        camion,
-        {
-            vacios: cam.vacios + vacios
-        }
-    );
-
-    return crearMovimiento({
-        tipo: TIPOS_MOVIMIENTO.RETIRO_CLIENTE,
-        id_cliente: idCliente,
-        camion_origen: camion,
-        camion_destino: null,
-        llenos: 0,
-        vacios,
-        observacion
-    });
-}
-
-
-/* =========================
-   ENTREGA + RETIRO
-========================= */
-
-export async function entregaRetiro({
-    idCliente,
-    camion,
-    llenos,
-    vacios,
-    observacion = ''
-}) {
-
-    llenos = Number(llenos);
-    vacios = Number(vacios);
-
-    if (llenos < 0 || vacios < 0) {
-        throw new Error(
-            'Las cantidades no pueden ser negativas.'
-        );
-    }
-
-    if (llenos === 0 && vacios === 0) {
-        throw new Error(
-            'Debes registrar al menos una cantidad.'
-        );
-    }
-
-    const diferencia = llenos - vacios;
-
-    const cliente = await obtener(
-        'clientes',
-        idCliente
-    );
-
-    if (!cliente || cliente.estado !== 'ACTIVO') {
-        throw new Error(
-            'El cliente no existe o está inactivo.'
-        );
-    }
-
-    await validarCamion(
-        camion,
-        llenos,
-        0
-    );
-
-    if (
-        diferencia < 0 &&
-        Math.abs(diferencia) >
-        (cliente.pendientes_actuales || 0)
-    ) {
-
-        throw new Error(
-            'El retiro supera los cilindros pendientes del cliente.'
-        );
-    }
-
-    const cam = await obtenerCamion(camion);
-
-    await actualizarInventario(
-        camion,
-        {
-            llenos: cam.llenos - llenos,
-            vacios: cam.vacios + vacios
-        }
-    );
-
-    await modificarPendientesCliente(
-        idCliente,
-        diferencia
-    );
-
-    return crearMovimiento({
-        tipo: TIPOS_MOVIMIENTO.ENTREGA_RETIRO,
-        id_cliente: idCliente,
-        camion_origen: camion,
-        camion_destino: null,
-        llenos,
-        vacios,
-        observacion
-    });
-}
-
-
-/* =========================
-   SALIDA A PLANTA
-========================= */
-
-export async function salidaPlanta({
-    camion,
-    vacios,
-    observacion = ''
-}) {
-
-    vacios = Number(vacios);
-
-    if (vacios <= 0) {
-        throw new Error(
-            'Indica una cantidad válida.'
-        );
-    }
-
-    await validarCamion(
-        camion,
-        0,
-        vacios
-    );
-
-    const cam = await obtenerCamion(camion);
-
-    await actualizarInventario(
-        camion,
-        {
-            vacios: cam.vacios - vacios
-        }
-    );
-
-    const idViaje = uuid();
-
-    await guardar(
-        'viajes_planta',
-        {
-            id_viaje: idViaje,
-            camion,
-            fecha_salida: fechaActual(),
-            fecha_regreso: null,
-            movimiento_salida_id: null,
-            movimiento_regreso_id: null,
-            vacios_enviados: vacios,
-            llenos_recibidos: 0,
-            estado: 'ABIERTO',
-            observacion
-        }
-    );
-
-    const movimiento = await crearMovimiento({
-        tipo: TIPOS_MOVIMIENTO.SALIDA_PLANTA,
-        camion_origen: camion,
-        camion_destino: null,
-        llenos: 0,
-        vacios,
-        id_viaje_planta: idViaje,
-        observacion
-    });
-
-    const viaje = await obtener(
-        'viajes_planta',
-        idViaje
-    );
-
-    await guardar(
-        'viajes_planta',
-        {
-            ...viaje,
-            movimiento_salida_id:
-                movimiento.id_movimiento
-        }
-    );
-
-    return movimiento;
-}
-
-
-/* =========================
-   REGRESO DE PLANTA
-========================= */
-
-export async function regresoPlanta({
-    idViaje,
-    llenos,
-    observacion = ''
-}) {
-
-    llenos = Number(llenos);
-
-    if (llenos <= 0) {
-        throw new Error(
-            'Indica una cantidad válida.'
-        );
-    }
-
-    const viaje = await obtener(
-        'viajes_planta',
-        idViaje
-    );
-
-    if (!viaje) {
-        throw new Error(
-            'El viaje a planta no existe.'
-        );
-    }
-
-    if (viaje.estado !== 'ABIERTO') {
-        throw new Error(
-            'Este viaje ya está cerrado.'
-        );
-    }
-
-    const cam = await obtenerCamion(
-        viaje.camion
-    );
-
-    await actualizarInventario(
-        viaje.camion,
-        {
-            llenos: cam.llenos + llenos
-        }
-    );
-
-    const movimiento = await crearMovimiento({
-        tipo: TIPOS_MOVIMIENTO.REGRESO_PLANTA,
-        camion_origen: null,
-        camion_destino: viaje.camion,
-        llenos,
-        vacios: 0,
-        id_viaje_planta: idViaje,
-        observacion
-    });
-
-    await guardar(
-        'viajes_planta',
-        {
-            ...viaje,
-            fecha_regreso: fechaActual(),
-            movimiento_regreso_id:
-                movimiento.id_movimiento,
-            llenos_recibidos: llenos,
-            estado: 'CERRADO'
-        }
-    );
-
-    return movimiento;
-}
-
-
-/* =========================
-   TRASLADO
-========================= */
-
-export async function trasladoCamiones({
-    origen,
-    destino,
-    tipoCilindro,
     cantidad,
-    observacion = ''
+    observacion = '',
+    retiroEspecial = false
 }) {
 
     cantidad = Number(cantidad);
 
-    if (origen === destino) {
+    if (
+        !Number.isInteger(cantidad) ||
+        cantidad <= 0
+    ) {
         throw new Error(
-            'El camión origen y destino deben ser diferentes.'
+            'La cantidad retirada debe ser un número entero mayor que 0.'
         );
     }
 
-    if (cantidad <= 0) {
-        throw new Error(
-            'Indica una cantidad válida.'
-        );
-    }
+    const camionActual =
+        await obtenerCamion(camion);
 
-    const camOrigen = await obtenerCamion(
-        origen
-    );
+    const cliente =
+        await validarCliente(idCliente);
 
-    const camDestino = await obtenerCamion(
-        destino
-    );
+    const pendienteActual =
+        cliente.pendientes_actuales || 0;
 
-    if (tipoCilindro === 'LLENOS') {
 
-        if (cantidad > camOrigen.llenos) {
+    /* =====================================================
+       RETIRO ESPECIAL
+       Recupera cilindros que no estaban registrados
+       previamente en el saldo del cliente.
+    ===================================================== */
+
+    if (retiroEspecial) {
+
+        observacion =
+            observacion.trim();
+        if (!observacion) {
             throw new Error(
-                `El Camión ${origen} no tiene suficientes llenos.`
+                'La observación es obligatoria para un retiro especial.'
             );
         }
-
-        await actualizarInventario(
-            origen,
-            {
-                llenos:
-                    camOrigen.llenos - cantidad
-            }
-        );
-
-        await actualizarInventario(
-            destino,
-            {
-                llenos:
-                    camDestino.llenos + cantidad
-            }
-        );
-
-    } else if (tipoCilindro === 'VACIOS') {
-
-        if (cantidad > camOrigen.vacios) {
-            throw new Error(
-                `El Camión ${origen} no tiene suficientes vacíos.`
-            );
-        }
-
-        await actualizarInventario(
-            origen,
+        await actualizarInventario(camion,
             {
                 vacios:
-                    camOrigen.vacios - cantidad
-            }
-        );
+                    (camionActual.vacios || 0) +
+                    cantidad
+            });
+        return crearMovimiento({
+            tipo:
+                TIPOS_MOVIMIENTO.RETIRO_CLIENTE,
+            id_cliente:
+                idCliente,
+            camion_origen:
+                null,
+            camion_destino:
+                camion,
+            llenos:
+                0,
+            vacios:
+                cantidad,
+            observacion:
+                `[RETIRO ESPECIAL] ${observacion}`,
+            retiro_especial:
+                true
+        });
+    }
 
-        await actualizarInventario(
-            destino,
-            {
-                vacios:
-                    camDestino.vacios + cantidad
-            }
-        );
 
-    } else {
+    /* =====================================================
+       RETIRO NORMAL
+    ===================================================== */
 
+    if (
+        cantidad >
+        pendienteActual
+    ) {
         throw new Error(
-            'Tipo de cilindro inválido.'
+            `El cliente tiene ${pendienteActual} cilindros pendientes. No puedes retirar ${cantidad}.`
         );
     }
+
+    await modificarPendienteCliente(
+        idCliente,
+        -cantidad
+    );
+
+    await actualizarInventario(
+        camion,
+        {
+            vacios:
+                (camionActual.vacios || 0) +
+                cantidad
+        }
+    );
 
     return crearMovimiento({
-        tipo: TIPOS_MOVIMIENTO.TRASLADO,
-        camion_origen: origen,
-        camion_destino: destino,
+        tipo:
+            TIPOS_MOVIMIENTO.RETIRO_CLIENTE,
+        id_cliente:
+            idCliente,
+        camion_origen:
+            null,
+        camion_destino:
+            camion,
         llenos:
-            tipoCilindro === 'LLENOS'
-                ? cantidad
-                : 0,
+            0,
         vacios:
-            tipoCilindro === 'VACIOS'
-                ? cantidad
-                : 0,
-        observacion
+            cantidad,
+        observacion,
+        retiro_especial:
+            false
     });
 }
 
 
-async function validarClienteExistente(idCliente) {
+/* =====================================================
+   ENTREGA + RETIRO
+===================================================== */
 
-    const cliente = await obtener(
-        'clientes',
-        idCliente
+export async function entregaRetiro({
+
+    idCliente,
+
+    camion,
+
+    llenos,
+
+    vacios,
+
+    observacion = ''
+
+}) {
+
+    llenos =
+        Number(llenos);
+
+    vacios =
+        Number(vacios);
+
+
+    validarCantidad(
+        llenos,
+        vacios
     );
 
-    if (!cliente) {
+
+    if (
+        llenos <= 0 &&
+        vacios <= 0
+    ) {
+
         throw new Error(
-            'El cliente no existe.'
+            'Debes entregar o retirar al menos un cilindro.'
         );
+
     }
 
-    if (cliente.estado !== 'ACTIVO') {
-        throw new Error(
-            'El cliente está inactivo.'
+
+    const camionActual =
+        await obtenerCamion(
+            camion
         );
+
+
+    validarCamion(
+        camionActual,
+        llenos,
+        0
+    );
+
+
+    const cliente =
+        await validarCliente(
+            idCliente
+        );
+
+
+    const pendienteActual =
+        cliente.pendientes_actuales || 0;
+
+
+    /*
+       La operación puede dejar pendiente igual,
+       aumentarlo o reducirlo.
+
+       Ejemplo:
+       entrega 8
+       retiro 5
+       nuevo pendiente = +3
+    */
+
+    const nuevoPendiente =
+        pendienteActual +
+        llenos -
+        vacios;
+
+
+    if (
+        nuevoPendiente < 0
+    ) {
+
+        throw new Error(
+            `El cliente tiene ${pendienteActual} pendientes. No puedes retirar ${vacios} porque recibirías más de lo que debe.`
+        );
+
     }
 
-    return cliente;
+
+    /*
+       Actualizar camión.
+    */
+
+    await actualizarInventario(
+        camion,
+        {
+            llenos:
+                (camionActual.llenos || 0) -
+                llenos,
+
+            vacios:
+                (camionActual.vacios || 0) +
+                vacios
+        }
+    );
+
+
+    /*
+       Actualizar cliente.
+
+       El cambio neto es:
+       + entregados
+       - recibidos
+    */
+
+    await modificarPendienteCliente(
+        idCliente,
+        llenos - vacios
+    );
+
+
+    return crearMovimiento({
+
+        tipo:
+            TIPOS_MOVIMIENTO.ENTREGA_RETIRO,
+
+        id_cliente:
+            idCliente,
+
+        camion_origen:
+            camion,
+
+        camion_destino:
+            camion,
+
+        llenos,
+
+        vacios,
+
+        observacion
+
+    });
 }
 
+
+/* =====================================================
+   SALIDA A PLANTA
+===================================================== */
+
+export async function salidaPlanta({
+
+    camion,
+
+    cantidad,
+
+    observacion = ''
+
+}) {
+
+    cantidad =
+        Number(cantidad);
+
+
+    if (
+        !Number.isInteger(cantidad) ||
+        cantidad <= 0
+    ) {
+
+        throw new Error(
+            'La cantidad enviada a planta debe ser un número entero mayor que 0.'
+        );
+
+    }
+
+
+    const camionActual =
+        await obtenerCamion(
+            camion
+        );
+
+
+    validarCamion(
+        camionActual,
+        0,
+        cantidad
+    );
+
+
+    const idViaje =
+        uuid();
+
+
+    /*
+       Sacar los vacíos del camión.
+    */
+
+    await actualizarInventario(
+        camion,
+        {
+            vacios:
+                (camionActual.vacios || 0) -
+                cantidad
+        }
+    );
+
+
+    /*
+       Crear viaje abierto.
+    */
+
+    const viaje = {
+
+        id_viaje:
+            idViaje,
+
+        camion,
+
+        fecha_salida:
+            new Date().toISOString(),
+
+        fecha_regreso:
+            null,
+
+        estado:
+            'ABIERTO',
+
+        vacios_enviados:
+            cantidad,
+
+        llenos_recibidos:
+            0,
+
+        id_movimiento_salida:
+            null,
+
+        id_movimiento_regreso:
+            null
+
+    };
+
+
+    await guardar(
+        'viajes_planta',
+        viaje
+    );
+
+
+    const movimiento =
+        await crearMovimiento({
+
+            tipo:
+                TIPOS_MOVIMIENTO.SALIDA_PLANTA,
+
+            id_cliente:
+                null,
+
+            camion_origen:
+                camion,
+
+            camion_destino:
+                null,
+
+            llenos:
+                0,
+
+            vacios:
+                cantidad,
+
+            id_viaje:
+                idViaje,
+
+            observacion
+
+        });
+
+
+    /*
+       Relacionar el movimiento con el viaje.
+    */
+
+    viaje.id_movimiento_salida =
+        movimiento.id_movimiento;
+
+
+    await guardar(
+        'viajes_planta',
+        viaje
+    );
+
+
+    return movimiento;
+}
+
+
+/* =====================================================
+   REGRESO DE PLANTA
+===================================================== */
+
+export async function regresoPlanta({
+
+    idViaje,
+
+    llenos,
+
+    observacion = ''
+
+}) {
+
+    llenos =
+        Number(llenos);
+
+
+    if (
+        !Number.isInteger(llenos) ||
+        llenos <= 0
+    ) {
+
+        throw new Error(
+            'La cantidad que regresa de planta debe ser un número entero mayor que 0.'
+        );
+
+    }
+
+
+    const viaje =
+        await obtener(
+            'viajes_planta',
+            idViaje
+        );
+
+
+    if (!viaje) {
+
+        throw new Error(
+            'El viaje de planta no existe.'
+        );
+
+    }
+
+
+    if (
+        viaje.estado !== 'ABIERTO'
+    ) {
+
+        throw new Error(
+            'Este viaje de planta ya está cerrado.'
+        );
+
+    }
+
+
+    /*
+       REGLA IMPORTANTE:
+
+       La cantidad que regresa debe coincidir
+       exactamente con la cantidad enviada.
+
+       Si salieron 10 vacíos,
+       deben regresar 10 llenos.
+    */
+
+    if (
+        llenos !==
+        viaje.vacios_enviados
+    ) {
+
+        throw new Error(
+            `El viaje envió ${viaje.vacios_enviados} cilindros. El regreso debe registrar exactamente ${viaje.vacios_enviados}.`
+        );
+
+    }
+
+
+    const camionActual =
+        await obtenerCamion(
+            viaje.camion
+        );
+
+
+    await actualizarInventario(
+        viaje.camion,
+        {
+            llenos:
+                (camionActual.llenos || 0) +
+                llenos
+        }
+    );
+
+
+    const movimiento =
+        await crearMovimiento({
+
+            tipo:
+                TIPOS_MOVIMIENTO.REGRESO_PLANTA,
+
+            id_cliente:
+                null,
+
+            camion_origen:
+                null,
+
+            camion_destino:
+                viaje.camion,
+
+            llenos:
+                llenos,
+
+            vacios:
+                0,
+
+            id_viaje:
+                idViaje,
+
+            observacion
+
+        });
+
+
+    /*
+       Cerrar viaje.
+    */
+
+    viaje.estado =
+        'CERRADO';
+
+    viaje.fecha_regreso =
+        new Date().toISOString();
+
+    viaje.llenos_recibidos =
+        llenos;
+
+    viaje.id_movimiento_regreso =
+        movimiento.id_movimiento;
+
+
+    await guardar(
+        'viajes_planta',
+        viaje
+    );
+
+
+    return movimiento;
+}
+
+
+/* =====================================================
+   TRASLADO ENTRE CAMIONES
+===================================================== */
+
+export async function trasladoCamiones({
+
+    origen,
+
+    destino,
+
+    llenos = 0,
+
+    vacios = 0,
+
+    observacion = ''
+
+}) {
+
+    llenos =
+        Number(llenos);
+
+    vacios =
+        Number(vacios);
+
+
+    validarCantidad(
+        llenos,
+        vacios
+    );
+
+
+    if (
+        llenos <= 0 &&
+        vacios <= 0
+    ) {
+
+        throw new Error(
+            'Debes trasladar al menos un cilindro.'
+        );
+
+    }
+
+
+    if (
+        origen === destino
+    ) {
+
+        throw new Error(
+            'El camión de origen y destino deben ser diferentes.'
+        );
+
+    }
+
+
+    if (
+        (
+            origen !== UBICACIONES.ROJO &&
+            origen !== UBICACIONES.BLANCO
+        ) ||
+        (
+            destino !== UBICACIONES.ROJO &&
+            destino !== UBICACIONES.BLANCO
+        )
+    ) {
+
+        throw new Error(
+            'El traslado solo puede realizarse entre ROJO y BLANCO.'
+        );
+
+    }
+
+
+    const camionOrigen =
+        await obtenerCamion(
+            origen
+        );
+
+
+    const camionDestino =
+        await obtenerCamion(
+            destino
+        );
+
+
+    validarCamion(
+        camionOrigen,
+        llenos,
+        vacios
+    );
+
+
+    /*
+       Primero quitamos del origen.
+    */
+
+    await actualizarInventario(
+        origen,
+        {
+            llenos:
+                (camionOrigen.llenos || 0) -
+                llenos,
+
+            vacios:
+                (camionOrigen.vacios || 0) -
+                vacios
+        }
+    );
+
+
+    /*
+       Luego agregamos al destino.
+    */
+
+    await actualizarInventario(
+        destino,
+        {
+            llenos:
+                (camionDestino.llenos || 0) +
+                llenos,
+
+            vacios:
+                (camionDestino.vacios || 0) +
+                vacios
+        }
+    );
+
+
+    return crearMovimiento({
+
+        tipo:
+            TIPOS_MOVIMIENTO.TRASLADO,
+
+        id_cliente:
+            null,
+
+        camion_origen:
+            origen,
+
+        camion_destino:
+            destino,
+
+        llenos,
+
+        vacios,
+
+        observacion
+
+    });
+}
+
+
+/* =====================================================
+   VALIDAR CLIENTE EXISTENTE
+===================================================== */
+
+export async function validarClienteExistente(
+    idCliente
+) {
+
+    return validarCliente(
+        idCliente
+    );
+}
+
+
+/* =====================================================
+   OBTENER MOVIMIENTOS
+===================================================== */
 
 export async function obtenerMovimientos() {
 
     const movimientos =
-        await obtenerTodos('movimientos');
+        await obtenerTodos(
+            'movimientos'
+        );
+
 
     return movimientos.sort(
         (a, b) =>
@@ -667,12 +1120,27 @@ export async function obtenerMovimientos() {
             new Date(a.fecha_hora)
     );
 }
+
+
+/* =====================================================
+   OBTENER VIAJES ABIERTOS
+===================================================== */
+
 export async function obtenerViajesAbiertos() {
 
-    const viajes = await obtenerTodos('viajes_planta');
+    const viajes =
+        await obtenerTodos(
+            'viajes_planta'
+        );
+
 
     return viajes
-        .filter(viaje => viaje.estado === 'ABIERTO')
+
+        .filter(
+            viaje =>
+                viaje.estado === 'ABIERTO'
+        )
+
         .sort(
             (a, b) =>
                 new Date(b.fecha_salida) -

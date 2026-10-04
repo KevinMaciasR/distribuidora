@@ -1,159 +1,4 @@
-import {
-    inicializarInventario,
-    obtenerInventario,
-    calcularTotal,
-    configurarApertura,
-    agregarSinAsignar,
-    retirarSinAsignar,
-    asignarACamion
-} from './inventario.js';
-
-import {
-    TIPOS_MOVIMIENTO,
-    entregaCliente,
-    retiroCliente,
-    entregaRetiro,
-    salidaPlanta,
-    regresoPlanta,
-    trasladoCamiones,
-    obtenerMovimientos,
-    obtenerViajesAbiertos
-} from './movimientos.js';
-
-import {
-    crearCliente,
-    obtenerClientes,
-    asignarPendienteInicial,
-    obtenerPendientesInicialesSinAsignar,
-    asignarPendientesIniciales
-} from './clientes.js';
-
-import {
-    obtenerEstadoSync
-} from './sincronizacion.js';
-
-import {
-    obtener,
-    obtenerTodos,
-    exportarBaseDatos,
-    importarBaseDatos
-} from './db.js';
-
-import {
-    vendidosHoy,
-    vendidosPorFecha,
-    vendidosPorRango,
-    vendidosPorCliente
-} from './reportes.js';
-import '../css/app.css';
-const app = document.getElementById('app');
-
-let paginaActual = 'inicio';
-
-
-document.addEventListener(
-    'DOMContentLoaded',
-    iniciar
-);
-
-
-async function iniciar() {
-
-    await inicializarInventario();
-
-    registrarServiceWorker();
-
-    render();
-}
-
-
-function registrarServiceWorker() {
-
-    if ('serviceWorker' in navigator) {
-
-        navigator.serviceWorker
-            .register('/sw.js')
-            .catch(error => {
-                console.error(
-                    'Error Service Worker:',
-                    error
-                );
-            });
-    }
-}
-
-
-/* =====================================================
-   NAVEGACIÓN PRINCIPAL
-===================================================== */
-
-async function render() {
-
-    switch (paginaActual) {
-
-        case 'inicio':
-            await renderInicio();
-            break;
-
-        case 'movimientos':
-            await renderMovimientos();
-            break;
-
-        case 'clientes':
-            await renderClientes();
-            break;
-        case 'inventario':
-            await renderInventario();
-            break;
-        case 'sync':
-            await renderSync();
-            break;
-        case 'reportes':
-            await renderReportes();
-            break;
-        default:
-            await renderInicio();
-    }
-}
-
-
-/* =====================================================
-   INICIO
-===================================================== */
-async function renderInicio() {
-
-    const inventario =
-        await obtenerInventario();
-
-    const sync =
-        await obtenerEstadoSync();
-
-    const total =
-        calcularTotal(inventario);
-
-    const vendidos =
-        await vendidosHoy();
-
-    const vaciosDisponibles =
-        (inventario.rojo?.vacios || 0) +
-        (inventario.blanco?.vacios || 0);
-
-
-    const estadoSync =
-        sync.total === 0
-            ? `
-                <div class="status-bar status-success">
-                    🟢 Datos actualizados
-                </div>
-              `
-            : `
-                <div class="status-bar status-warning">
-                    🟡 Hay ${sync.total} elemento(s) pendiente(s) de sincronización
-                </div>
-              `;
-
-
-    app.innerHTML = `
+var e=(e,t,n)=>()=>{if(n)throw n[0];try{return e&&(t=e(e=0)),t}catch(e){throw n=[e],e}},t=(e,t)=>()=>(t||(e((t={exports:{}}).exports,t),e=null),t.exports);(function(){let e=document.createElement(`link`).relList;if(e&&e.supports&&e.supports(`modulepreload`))return;for(let e of document.querySelectorAll(`link[rel="modulepreload"]`))n(e);new MutationObserver(e=>{for(let t of e)if(t.type===`childList`)for(let e of t.addedNodes)e.tagName===`LINK`&&e.rel===`modulepreload`&&n(e)}).observe(document,{childList:!0,subtree:!0});function t(e){let t={};return e.integrity&&(t.integrity=e.integrity),e.referrerPolicy&&(t.referrerPolicy=e.referrerPolicy),t.credentials=e.crossOrigin===`use-credentials`?`include`:e.crossOrigin===`anonymous`?`omit`:`same-origin`,t}function n(e){if(e.ep)return;e.ep=!0;let n=t(e);fetch(e.href,n)}})();function n(){return u||(u=new Promise((e,t)=>{let n=indexedDB.open(c,l);n.onupgradeneeded=e=>{let t=e.target.result;if(t.objectStoreNames.contains(`configuracion`)||t.createObjectStore(`configuracion`,{keyPath:`id`}),!t.objectStoreNames.contains(`clientes`)){let e=t.createObjectStore(`clientes`,{keyPath:`id_cliente`});e.createIndex(`estado`,`estado`,{unique:!1}),e.createIndex(`nombre`,`nombre`,{unique:!1})}if(t.objectStoreNames.contains(`inventario`)||t.createObjectStore(`inventario`,{keyPath:`ubicacion`}),!t.objectStoreNames.contains(`movimientos`)){let e=t.createObjectStore(`movimientos`,{keyPath:`id_movimiento`});e.createIndex(`fecha_hora`,`fecha_hora`,{unique:!1}),e.createIndex(`tipo`,`tipo`,{unique:!1}),e.createIndex(`sync_estado`,`sync_estado`,{unique:!1}),e.createIndex(`estado`,`estado`,{unique:!1})}t.objectStoreNames.contains(`viajes_planta`)||t.createObjectStore(`viajes_planta`,{keyPath:`id_viaje`}).createIndex(`estado`,`estado`,{unique:!1}),t.objectStoreNames.contains(`sincronizacion`)||t.createObjectStore(`sincronizacion`,{keyPath:`id`})},n.onsuccess=t=>{e(t.target.result)},n.onerror=()=>{t(n.error)}}),u)}async function r(e,t){let r=await n();return new Promise((n,i)=>{let a=r.transaction(e,`readwrite`);a.objectStore(e).put(t),a.oncomplete=()=>n(t),a.onerror=()=>i(a.error)})}async function i(e,t){let r=await n();return new Promise((n,i)=>{let a=r.transaction(e,`readonly`).objectStore(e).get(t);a.onsuccess=()=>n(a.result),a.onerror=()=>i(a.error)})}async function a(e){let t=await n();return new Promise((n,r)=>{let i=t.transaction(e,`readonly`).objectStore(e).getAll();i.onsuccess=()=>n(i.result),i.onerror=()=>r(i.error)})}async function o(){let e=[`configuracion`,`clientes`,`inventario`,`movimientos`,`viajes_planta`,`sincronizacion`],t={version:1,fecha_exportacion:new Date().toISOString(),base_datos:c,datos:{}};for(let n of e)t.datos[n]=await a(n);let n=JSON.stringify(t,null,2),r=new Blob([n],{type:`application/json`}),i=URL.createObjectURL(r),o=new Date,s=`respaldo_distribuidora_${o.getFullYear()}-${String(o.getMonth()+1).padStart(2,`0`)}-${String(o.getDate()).padStart(2,`0`)}_${String(o.getHours()).padStart(2,`0`)}-${String(o.getMinutes()).padStart(2,`0`)}.json`,l=document.createElement(`a`);return l.href=i,l.download=s,document.body.appendChild(l),l.click(),l.remove(),URL.revokeObjectURL(i),s}async function s(e){if(!e)throw Error(`No se seleccionó ningún archivo.`);if(e.type!==`application/json`&&!e.name.toLowerCase().endsWith(`.json`))throw Error(`El archivo seleccionado no es un respaldo JSON válido.`);let t=await e.text(),r;try{r=JSON.parse(t)}catch{throw Error(`El archivo de respaldo no contiene un JSON válido.`)}if(!r||!r.datos||typeof r.datos!=`object`)throw Error(`El archivo no tiene una estructura de respaldo válida.`);let i=[`configuracion`,`clientes`,`inventario`,`movimientos`,`viajes_planta`,`sincronizacion`],a=await n();return new Promise((e,t)=>{let n=a.transaction(i,`readwrite`);n.oncomplete=()=>{e(!0)},n.onerror=()=>{t(Error(`No se pudo restaurar la base de datos.`))},n.onabort=()=>{t(Error(`La restauración de la base de datos fue cancelada.`))};try{for(let e of i){let t=n.objectStore(e);t.clear();let i=r.datos[e];if(Array.isArray(i))for(let e of i)t.put(e)}}catch(e){n.abort(),t(e)}})}var c,l,u,d=e((()=>{c=`distribuidora_mobile`,l=1,u=null}));async function f(){let e=await a(`inventario`);e.find(e=>e.ubicacion===S.ROJO)||await r(`inventario`,{ubicacion:S.ROJO,llenos:0,vacios:0}),e.find(e=>e.ubicacion===S.BLANCO)||await r(`inventario`,{ubicacion:S.BLANCO,llenos:0,vacios:0}),e.find(e=>e.ubicacion===S.CLIENTES)||await r(`inventario`,{ubicacion:S.CLIENTES,pendientes:0}),e.find(e=>e.ubicacion===S.SIN_ASIGNAR)||await r(`inventario`,{ubicacion:S.SIN_ASIGNAR,llenos:0,vacios:0})}async function p(){return await f(),{rojo:await i(`inventario`,S.ROJO),blanco:await i(`inventario`,S.BLANCO),clientes:await i(`inventario`,S.CLIENTES),sinAsignar:await i(`inventario`,S.SIN_ASIGNAR)}}async function m(e,t){let n=await i(`inventario`,e);if(!n)throw Error(`No existe la ubicación ${e}.`);let a={...n,...t,ubicacion:e};return h(a),await r(`inventario`,a),a}function h(e){if(e.llenos!==void 0&&(!Number.isInteger(e.llenos)||e.llenos<0))throw Error(`Los cilindros llenos deben ser un número entero mayor o igual a 0.`);if(e.vacios!==void 0&&(!Number.isInteger(e.vacios)||e.vacios<0))throw Error(`Los cilindros vacíos deben ser un número entero mayor o igual a 0.`);if(e.pendientes!==void 0&&(!Number.isInteger(e.pendientes)||e.pendientes<0))throw Error(`Los pendientes de clientes deben ser un número entero mayor o igual a 0.`)}function g(e){let t=(e.rojo?.llenos||0)+(e.rojo?.vacios||0),n=(e.blanco?.llenos||0)+(e.blanco?.vacios||0),r=e.clientes?.pendientes||0,i=(e.sinAsignar?.llenos||0)+(e.sinAsignar?.vacios||0);return t+n+r+i}async function _({rojoLlenos:e,rojoVacios:t,blancoLlenos:n,blancoVacios:i,clientesPendientes:o}){if((await a(`movimientos`)).length>0)throw Error(`No puedes modificar la apertura después de registrar movimientos.`);if([e,t,n,i,o].some(e=>!Number.isInteger(e)||e<0))throw Error(`Todos los valores deben ser números enteros mayores o iguales a 0.`);return await r(`inventario`,{ubicacion:S.ROJO,llenos:e,vacios:t}),await r(`inventario`,{ubicacion:S.BLANCO,llenos:n,vacios:i}),await r(`inventario`,{ubicacion:S.CLIENTES,pendientes:o}),await r(`inventario`,{ubicacion:S.SIN_ASIGNAR,llenos:0,vacios:0}),p()}async function v({llenos:e=0,vacios:t=0,observacion:n=``}){if(e=Number(e),t=Number(t),x(e,t),e===0&&t===0)throw Error(`Debes agregar al menos un cilindro.`);let a=await i(`inventario`,S.SIN_ASIGNAR);if(!a)throw Error(`No existe la ubicación SIN ASIGNAR.`);return await r(`inventario`,{...a,llenos:(a.llenos||0)+e,vacios:(a.vacios||0)+t}),{llenos:e,vacios:t,observacion:n}}async function y({llenos:e=0,vacios:t=0,observacion:n=``}){if(e=Number(e),t=Number(t),x(e,t),e===0&&t===0)throw Error(`Debes retirar al menos un cilindro.`);let a=await i(`inventario`,S.SIN_ASIGNAR);if(!a)throw Error(`No existe la ubicación SIN ASIGNAR.`);if(e>(a.llenos||0))throw Error(`No puedes retirar ${e} llenos. Solo hay ${a.llenos||0} sin asignar.`);if(t>(a.vacios||0))throw Error(`No puedes retirar ${t} vacíos. Solo hay ${a.vacios||0} sin asignar.`);return await r(`inventario`,{...a,llenos:(a.llenos||0)-e,vacios:(a.vacios||0)-t}),{llenos:e,vacios:t,observacion:n}}async function b({camion:e,llenos:t=0,vacios:n=0}){if(e!==S.ROJO&&e!==S.BLANCO)throw Error(`El destino debe ser ROJO o BLANCO.`);if(t=Number(t),n=Number(n),x(t,n),t===0&&n===0)throw Error(`Debes asignar al menos un cilindro.`);let a=await i(`inventario`,S.SIN_ASIGNAR),o=await i(`inventario`,e);if(!a||!o)throw Error(`No se encontró el inventario necesario.`);if(t>(a.llenos||0))throw Error(`No hay suficientes cilindros llenos sin asignar. Disponibles: ${a.llenos||0}.`);if(n>(a.vacios||0))throw Error(`No hay suficientes cilindros vacíos sin asignar. Disponibles: ${a.vacios||0}.`);return await r(`inventario`,{...a,llenos:(a.llenos||0)-t,vacios:(a.vacios||0)-n}),await r(`inventario`,{...o,llenos:(o.llenos||0)+t,vacios:(o.vacios||0)+n}),p()}function x(e,t){if(!Number.isInteger(e)||!Number.isInteger(t)||e<0||t<0)throw Error(`Las cantidades deben ser números enteros mayores o iguales a 0.`)}var S,C=e((()=>{d(),S={ROJO:`ROJO`,BLANCO:`BLANCO`,CLIENTES:`CLIENTES`,SIN_ASIGNAR:`SIN ASIGNAR`}}));function w(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`}async function T({nombre:e,telefono:t=``,direccion:n=``,sector:i=``,observacion:a=``}){if(e=e.trim(),!e)throw Error(`El nombre del cliente es obligatorio.`);let o={id_cliente:w(),nombre:e,telefono:t,direccion:n,sector:i,fecha_registro:new Date().toISOString(),estado:`ACTIVO`,observacion:a,pendientes_actuales:0,sync_estado:`PENDIENTE`};return await r(`clientes`,o),o}async function E(){return(await a(`clientes`)).filter(e=>e.estado===`ACTIVO`).sort((e,t)=>e.nombre.localeCompare(t.nombre))}async function D(e){return i(`clientes`,e)}async function O(){return(await a(`clientes`)).filter(e=>e.estado===`ACTIVO`).reduce((e,t)=>e+(t.pendientes_actuales||0),0)}async function k(){let e=((await p()).clientes?.pendientes||0)-await O();return Math.max(0,e)}async function A(e){if(!Array.isArray(e))throw Error(`Las asignaciones deben ser un arreglo.`);let t=(await p()).clientes?.pendientes||0,n=(await a(`clientes`)).filter(e=>e.estado===`ACTIVO`),i=new Map(n.map(e=>[e.id_cliente,e])),o=0;for(let t of e){let e=Number(t.cantidad);if(!Number.isInteger(e)||e<0)throw Error(`Las cantidades iniciales deben ser números enteros mayores o iguales a 0.`);if(e!==0){if(!i.get(t.idCliente))throw Error(`Uno de los clientes seleccionados no existe o está inactivo.`);o+=e}}let s=t-n.reduce((e,t)=>e+(t.pendientes_actuales||0),0);if(o>s)throw Error(`No hay suficientes pendientes iniciales. Disponibles: ${s}.`);for(let t of e){let e=Number(t.cantidad);if(e===0)continue;let n=i.get(t.idCliente);n.pendientes_actuales=(n.pendientes_actuales||0)+e,n.sync_estado=`PENDIENTE`,await r(`clientes`,n)}return{asignados:o,disponibles:s-o}}async function j(e,t){if(t=Number(t),!Number.isInteger(t))throw Error(`La cantidad debe ser un número entero.`);let n=await D(e);if(!n)throw Error(`El cliente no existe.`);let i=(n.pendientes_actuales||0)+t;if(i<0)throw Error(`El pendiente del cliente no puede quedar negativo.`);n.pendientes_actuales=i,n.sync_estado=`PENDIENTE`,await r(`clientes`,n);let a=await O();return await m(S.CLIENTES,{pendientes:a}),n}var M=e((()=>{d(),C()}));function N(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`}async function P(e){let t=await i(`inventario`,e);if(!t||e!==S.ROJO&&e!==S.BLANCO)throw Error(`No existe el camión ${e}.`);return t}function F(e,t){if(!Number.isInteger(e)||!Number.isInteger(t)||e<0||t<0)throw Error(`Las cantidades deben ser números enteros mayores o iguales a 0.`)}function I(e,t=0,n=0){if(t>(e.llenos||0))throw Error(`El camión no tiene suficientes cilindros llenos. Disponibles: ${e.llenos||0}.`);if(n>(e.vacios||0))throw Error(`El camión no tiene suficientes cilindros vacíos. Disponibles: ${e.vacios||0}.`)}async function L(e){let t=await D(e);if(!t)throw Error(`El cliente seleccionado no existe.`);if(t.estado!==`ACTIVO`)throw Error(`El cliente seleccionado está inactivo.`);return t}async function R(e){let t={id_movimiento:N(),fecha_hora:new Date().toISOString(),estado:`ACTIVO`,created_at:new Date().toISOString(),dispositivo:`MOVIL`,sync_estado:`PENDIENTE`,...e};return await r(`movimientos`,t),t}async function ee({idCliente:e,camion:t,cantidad:n,observacion:r=``}){if(n=Number(n),!Number.isInteger(n)||n<=0)throw Error(`La cantidad entregada debe ser un número entero mayor que 0.`);let i=await P(t);return I(i,n,0),await L(e),await m(t,{llenos:(i.llenos||0)-n}),await j(e,n),R({tipo:B.ENTREGA_CLIENTE,id_cliente:e,camion_origen:t,camion_destino:null,llenos:n,vacios:0,observacion:r})}async function te({idCliente:e,camion:t,cantidad:n,observacion:r=``,retiroEspecial:i=!1}){if(n=Number(n),!Number.isInteger(n)||n<=0)throw Error(`La cantidad retirada debe ser un número entero mayor que 0.`);let a=await P(t),o=(await L(e)).pendientes_actuales||0;if(i){if(r=r.trim(),!r)throw Error(`La observación es obligatoria para un retiro especial.`);return await m(t,{vacios:(a.vacios||0)+n}),R({tipo:B.RETIRO_CLIENTE,id_cliente:e,camion_origen:null,camion_destino:t,llenos:0,vacios:n,observacion:`[RETIRO ESPECIAL] ${r}`,retiro_especial:!0})}if(n>o)throw Error(`El cliente tiene ${o} cilindros pendientes. No puedes retirar ${n}.`);return await j(e,-n),await m(t,{vacios:(a.vacios||0)+n}),R({tipo:B.RETIRO_CLIENTE,id_cliente:e,camion_origen:null,camion_destino:t,llenos:0,vacios:n,observacion:r,retiro_especial:!1})}async function ne({idCliente:e,camion:t,llenos:n,vacios:r,observacion:i=``}){if(n=Number(n),r=Number(r),F(n,r),n<=0&&r<=0)throw Error(`Debes entregar o retirar al menos un cilindro.`);let a=await P(t);I(a,n,0);let o=(await L(e)).pendientes_actuales||0;if(o+n-r<0)throw Error(`El cliente tiene ${o} pendientes. No puedes retirar ${r} porque recibirías más de lo que debe.`);return await m(t,{llenos:(a.llenos||0)-n,vacios:(a.vacios||0)+r}),await j(e,n-r),R({tipo:B.ENTREGA_RETIRO,id_cliente:e,camion_origen:t,camion_destino:t,llenos:n,vacios:r,observacion:i})}async function re({camion:e,cantidad:t,observacion:n=``}){if(t=Number(t),!Number.isInteger(t)||t<=0)throw Error(`La cantidad enviada a planta debe ser un número entero mayor que 0.`);let i=await P(e);I(i,0,t);let a=N();await m(e,{vacios:(i.vacios||0)-t});let o={id_viaje:a,camion:e,fecha_salida:new Date().toISOString(),fecha_regreso:null,estado:`ABIERTO`,vacios_enviados:t,llenos_recibidos:0,id_movimiento_salida:null,id_movimiento_regreso:null};await r(`viajes_planta`,o);let s=await R({tipo:B.SALIDA_PLANTA,id_cliente:null,camion_origen:e,camion_destino:null,llenos:0,vacios:t,id_viaje:a,observacion:n});return o.id_movimiento_salida=s.id_movimiento,await r(`viajes_planta`,o),s}async function ie({idViaje:e,llenos:t,observacion:n=``}){if(t=Number(t),!Number.isInteger(t)||t<=0)throw Error(`La cantidad que regresa de planta debe ser un número entero mayor que 0.`);let a=await i(`viajes_planta`,e);if(!a)throw Error(`El viaje de planta no existe.`);if(a.estado!==`ABIERTO`)throw Error(`Este viaje de planta ya está cerrado.`);if(t!==a.vacios_enviados)throw Error(`El viaje envió ${a.vacios_enviados} cilindros. El regreso debe registrar exactamente ${a.vacios_enviados}.`);let o=await P(a.camion);await m(a.camion,{llenos:(o.llenos||0)+t});let s=await R({tipo:B.REGRESO_PLANTA,id_cliente:null,camion_origen:null,camion_destino:a.camion,llenos:t,vacios:0,id_viaje:e,observacion:n});return a.estado=`CERRADO`,a.fecha_regreso=new Date().toISOString(),a.llenos_recibidos=t,a.id_movimiento_regreso=s.id_movimiento,await r(`viajes_planta`,a),s}async function ae({origen:e,destino:t,llenos:n=0,vacios:r=0,observacion:i=``}){if(n=Number(n),r=Number(r),F(n,r),n<=0&&r<=0)throw Error(`Debes trasladar al menos un cilindro.`);if(e===t)throw Error(`El camión de origen y destino deben ser diferentes.`);if(e!==S.ROJO&&e!==S.BLANCO||t!==S.ROJO&&t!==S.BLANCO)throw Error(`El traslado solo puede realizarse entre ROJO y BLANCO.`);let a=await P(e),o=await P(t);return I(a,n,r),await m(e,{llenos:(a.llenos||0)-n,vacios:(a.vacios||0)-r}),await m(t,{llenos:(o.llenos||0)+n,vacios:(o.vacios||0)+r}),R({tipo:B.TRASLADO,id_cliente:null,camion_origen:e,camion_destino:t,llenos:n,vacios:r,observacion:i})}async function oe(){return(await a(`movimientos`)).sort((e,t)=>new Date(t.fecha_hora)-new Date(e.fecha_hora))}async function z(){return(await a(`viajes_planta`)).filter(e=>e.estado===`ABIERTO`).sort((e,t)=>new Date(t.fecha_salida)-new Date(e.fecha_salida))}var B,V=e((()=>{d(),C(),M(),B={ENTREGA_CLIENTE:`ENTREGA A CLIENTE`,RETIRO_CLIENTE:`RETIRO DE CLIENTE`,ENTREGA_RETIRO:`ENTREGA + RETIRO`,SALIDA_PLANTA:`SALIDA A PLANTA`,REGRESO_PLANTA:`REGRESO DE PLANTA`,TRASLADO:`TRASLADO ENTRE CAMIONES`}}));async function H(){let e=await a(`movimientos`),t=await a(`clientes`);return{movimientos:e.filter(e=>e.sync_estado===`PENDIENTE`||e.sync_estado===`ERROR`),clientes:t.filter(e=>e.sync_estado===`PENDIENTE`||e.sync_estado===`ERROR`)}}async function U(){let e=await H();return{movimientos:e.movimientos.length,clientes:e.clientes.length,total:e.movimientos.length+e.clientes.length}}var W=e((()=>{d()}));function G(e=new Date){return`${e.getFullYear()}-${String(e.getMonth()+1).padStart(2,`0`)}-${String(e.getDate()).padStart(2,`0`)}`}async function K(){let e=await a(`movimientos`),t=G();return e.filter(e=>e.estado===`ACTIVO`&&e.fecha_hora?.slice(0,10)===t&&(e.tipo===`ENTREGA A CLIENTE`||e.tipo===`ENTREGA + RETIRO`)).reduce((e,t)=>e+(t.llenos||0),0)}async function se(e){return(await a(`movimientos`)).filter(t=>t.estado===`ACTIVO`&&t.fecha_hora?.slice(0,10)===e&&(t.tipo===`ENTREGA A CLIENTE`||t.tipo===`ENTREGA + RETIRO`)).reduce((e,t)=>e+(t.llenos||0),0)}async function ce(e,t){return(await a(`movimientos`)).filter(n=>{if(n.estado!==`ACTIVO`)return!1;let r=n.fecha_hora?.slice(0,10);return r>=e&&r<=t&&(n.tipo===`ENTREGA A CLIENTE`||n.tipo===`ENTREGA + RETIRO`)}).reduce((e,t)=>e+(t.llenos||0),0)}async function le(){let e=await a(`movimientos`),t={};return e.filter(e=>e.estado===`ACTIVO`&&(e.tipo===`ENTREGA A CLIENTE`||e.tipo===`ENTREGA + RETIRO`)).forEach(e=>{let n=e.id_cliente||`SIN CLIENTE`;t[n]||(t[n]=0),t[n]+=e.llenos||0}),t}var ue=e((()=>{d()})),q=e((()=>{}));t((()=>{C(),V(),M(),W(),d(),ue(),q();var e=document.getElementById(`app`),t=`inicio`;document.addEventListener(`DOMContentLoaded`,n);async function n(){await f(),r(),c()}function r(){`serviceWorker`in navigator&&navigator.serviceWorker.register(`/sw.js`).catch(e=>{console.error(`Error Service Worker:`,e)})}async function c(){switch(t){case`inicio`:await l();break;case`movimientos`:await u();break;case`clientes`:await P();break;case`inventario`:await $();break;case`sync`:await L();break;case`reportes`:await fe();break;default:await l()}}async function l(){let t=await p(),n=await U(),r=g(t),i=await K(),a=(t.rojo?.vacios||0)+(t.blanco?.vacios||0);e.innerHTML=`
 
         <!-- =========================================
              ENCABEZADO
@@ -177,7 +22,15 @@ async function renderInicio() {
                  SINCRONIZACIÓN
             ====================================== -->
 
-            ${estadoSync}
+            ${n.total===0?`
+                <div class="status-bar status-success">
+                    🟢 Datos actualizados
+                </div>
+              `:`
+                <div class="status-bar status-warning">
+                    🟡 Hay ${n.total} elemento(s) pendiente(s) de sincronización
+                </div>
+              `}
 
 
             <!-- =====================================
@@ -213,7 +66,7 @@ async function renderInicio() {
                         </span>
 
                         <strong class="number">
-                            ${vendidos}
+                            ${i}
                         </strong>
 
                     </div>
@@ -226,7 +79,7 @@ async function renderInicio() {
                         </span>
 
                         <strong class="number">
-                            ${vaciosDisponibles}
+                            ${a}
                         </strong>
 
                     </div>
@@ -272,7 +125,7 @@ async function renderInicio() {
                         </span>
 
                         <strong class="number">
-                            ${inventario.rojo?.llenos || 0}
+                            ${t.rojo?.llenos||0}
                         </strong>
 
                         <span class="sub">
@@ -291,7 +144,7 @@ async function renderInicio() {
                         </span>
 
                         <strong class="number">
-                            ${inventario.rojo?.vacios || 0}
+                            ${t.rojo?.vacios||0}
                         </strong>
 
                         <span class="sub">
@@ -310,7 +163,7 @@ async function renderInicio() {
                         </span>
 
                         <strong class="number">
-                            ${inventario.blanco?.llenos || 0}
+                            ${t.blanco?.llenos||0}
                         </strong>
 
                         <span class="sub">
@@ -329,7 +182,7 @@ async function renderInicio() {
                         </span>
 
                         <strong class="number">
-                            ${inventario.blanco?.vacios || 0}
+                            ${t.blanco?.vacios||0}
                         </strong>
 
                         <span class="sub">
@@ -351,7 +204,7 @@ async function renderInicio() {
                         </span>
 
                         <strong class="number">
-                            ${inventario.clientes?.pendientes || 0}
+                            ${t.clientes?.pendientes||0}
                         </strong>
 
                         <span class="sub">
@@ -373,7 +226,7 @@ async function renderInicio() {
                     </span>
 
                     <strong>
-                        ${total}
+                        ${r}
                     </strong>
 
                 </div>
@@ -598,173 +451,13 @@ async function renderInicio() {
         </main>
 
 
-        ${renderNav('inicio')}
+        ${Z(`inicio`)}
 
-    `;
+    `,document.getElementById(`btnApertura`)?.addEventListener(`click`,de),document.getElementById(`btnNuevoMovimiento`)?.addEventListener(`click`,m),document.getElementById(`btnExportarBD`)?.addEventListener(`click`,async()=>{try{let e=await o();alert(`✅ Respaldo creado correctamente.\n\n${e}`)}catch(e){console.error(e),alert(`❌ No se pudo exportar la base de datos.\n\n${e.message}`)}}),document.getElementById(`btnImportarBD`)?.addEventListener(`click`,()=>{document.getElementById(`inputImportarBD`)?.click()}),document.getElementById(`inputImportarBD`)?.addEventListener(`change`,async e=>{let t=e.target.files[0];if(t){if(!confirm(`⚠️ ATENCIÓN
 
+Cargar este respaldo reemplazará los datos actuales.
 
-    /* =============================================
-       BOTÓN APERTURA
-    ============================================= */
-
-    document
-        .getElementById('btnApertura')
-        ?.addEventListener(
-            'click',
-            mostrarApertura
-        );
-
-
-    /* =============================================
-       NUEVO MOVIMIENTO
-    ============================================= */
-
-    document
-        .getElementById('btnNuevoMovimiento')
-        ?.addEventListener(
-            'click',
-            mostrarTiposMovimiento
-        );
-
-
-    /* =============================================
-       EXPORTAR BASE DE DATOS
-    ============================================= */
-
-    document
-        .getElementById('btnExportarBD')
-        ?.addEventListener(
-            'click',
-            async () => {
-
-                try {
-
-                    const nombre =
-                        await exportarBaseDatos();
-
-                    alert(
-                        `✅ Respaldo creado correctamente.\n\n${nombre}`
-                    );
-
-                } catch (error) {
-
-                    console.error(error);
-
-                    alert(
-                        `❌ No se pudo exportar la base de datos.\n\n${error.message}`
-                    );
-
-                }
-
-            }
-        );
-
-
-    /* =============================================
-       CARGAR BASE DE DATOS
-    ============================================= */
-
-    document
-        .getElementById('btnImportarBD')
-        ?.addEventListener(
-            'click',
-            () => {
-
-                document
-                    .getElementById('inputImportarBD')
-                    ?.click();
-
-            }
-        );
-
-
-    /* =============================================
-       PROCESAR ARCHIVO
-    ============================================= */
-
-    document
-        .getElementById('inputImportarBD')
-        ?.addEventListener(
-            'change',
-            async evento => {
-
-                const archivo =
-                    evento.target.files[0];
-
-                if (!archivo) {
-                    return;
-                }
-
-
-                const confirmar =
-                    confirm(
-                        '⚠️ ATENCIÓN\n\n' +
-                        'Cargar este respaldo reemplazará los datos actuales.\n\n' +
-                        '¿Quieres continuar?'
-                    );
-
-
-                if (!confirmar) {
-
-                    evento.target.value = '';
-
-                    return;
-
-                }
-
-
-                try {
-
-                    await importarBaseDatos(
-                        archivo
-                    );
-
-
-                    alert(
-                        '✅ Base de datos restaurada correctamente.'
-                    );
-
-
-                    window.location.reload();
-
-
-                } catch (error) {
-
-                    console.error(error);
-
-
-                    alert(
-                        `❌ No se pudo cargar el respaldo.\n\n${error.message}`
-                    );
-
-                }
-
-
-                evento.target.value = '';
-
-            }
-        );
-
-
-    /* =============================================
-       NAVEGACIÓN
-    ============================================= */
-
-    registrarNavegacion();
-
-}
-
-
-/* =====================================================
-   LISTA DE MOVIMIENTOS
-===================================================== */
-
-async function renderMovimientos() {
-
-    const movimientos =
-        await obtenerMovimientos();
-
-    app.innerHTML = `
+¿Quieres continuar?`)){e.target.value=``;return}try{await s(t),alert(`✅ Base de datos restaurada correctamente.`),window.location.reload()}catch(e){console.error(e),alert(`❌ No se pudo cargar el respaldo.\n\n${e.message}`)}e.target.value=``}}),Q()}async function u(){let t=await oe();e.innerHTML=`
 
         <header class="app-header">
 
@@ -792,9 +485,7 @@ async function renderMovimientos() {
                 </div>
 
 
-                ${movimientos.length === 0
-
-            ? `
+                ${t.length===0?`
                         <div class="empty-state">
 
                             <div class="icon">
@@ -804,34 +495,21 @@ async function renderMovimientos() {
                             No hay movimientos registrados.
 
                         </div>
-                      `
-
-            : `
+                      `:`
                         <div class="list">
 
-                            ${movimientos
-                .slice(0, 30)
-                .map(m => {
-
-                    const cantidad = [
-                        m.llenos > 0 ? `Llenos: ${m.llenos}` : '',
-                        m.vacios > 0 ? `Vacíos: ${m.vacios}` : ''
-                    ]
-                        .filter(Boolean)
-                        .join(' | ');
-
-                    return `
+                            ${t.slice(0,30).map(e=>{let t=[e.llenos>0?`Llenos: ${e.llenos}`:``,e.vacios>0?`Vacíos: ${e.vacios}`:``].filter(Boolean).join(` | `);return`
 
                                         <div class="list-item">
 
                                             <div class="list-item-top">
 
                                                 <span class="list-item-title">
-                                                    ${m.tipo}
+                                                    ${e.tipo}
                                                 </span>
 
                                                 <span class="badge badge-warning">
-                                                    ${m.sync_estado}
+                                                    ${e.sync_estado}
                                                 </span>
 
                                             </div>
@@ -839,77 +517,37 @@ async function renderMovimientos() {
 
                                             <div class="list-item-sub">
 
-                                                ${new Date(
-                        m.fecha_hora
-                    ).toLocaleString('es-EC')}
+                                                ${new Date(e.fecha_hora).toLocaleString(`es-EC`)}
 
                                             </div>
 
 
                                             <div class="list-item-sub">
 
-                                                ${m.id_cliente
-                            ? '👤 Cliente'
-                            : ''
-                        }
+                                                ${e.id_cliente?`👤 Cliente`:``}
 
-${m.tipo === 'REGRESO DE PLANTA'
-                            ? '🏭 PLANTA'
-                            : m.camion_origen
-                                ? '🚚 ' + m.camion_origen
-                                : ''
-                        }
+${e.tipo===`REGRESO DE PLANTA`?`🏭 PLANTA`:e.camion_origen?`🚚 `+e.camion_origen:``}
 
-${m.camion_destino
-                            ? ' → ' + m.camion_destino
-                            : ''
-                        }
+${e.camion_destino?` → `+e.camion_destino:``}
 
-${cantidad
-                            ? ' | ' + cantidad
-                            : ''
-                        }
+${t?` | `+t:``}
 
                                             </div>
 
                                         </div>
 
-                                    `;
-                })
-                .join('')}
+                                    `}).join(``)}
 
                         </div>
-                      `
-        }
+                      `}
 
             </div>
 
         </main>
 
 
-        ${renderNav('movimientos')}
-    `;
-
-
-    document
-        .getElementById('btnNuevo')
-        .addEventListener(
-            'click',
-            mostrarTiposMovimiento
-        );
-
-
-    registrarNavegacion();
-}
-
-
-/* =====================================================
-   SELECCIÓN DE MOVIMIENTO
-===================================================== */
-
-function mostrarTiposMovimiento() {
-
-    app.innerHTML = `
+        ${Z(`movimientos`)}
+    `,document.getElementById(`btnNuevo`).addEventListener(`click`,m),Q()}function m(){e.innerHTML=`
 
         <header class="app-header">
 
@@ -924,52 +562,22 @@ function mostrarTiposMovimiento() {
 
             <div class="movement-grid">
 
-                ${botonMovimiento(
-        '🚚',
-        'ENTREGA A CLIENTE',
-        'Entrega cilindros llenos',
-        TIPOS_MOVIMIENTO.ENTREGA_CLIENTE
-    )}
+                ${h(`🚚`,`ENTREGA A CLIENTE`,`Entrega cilindros llenos`,B.ENTREGA_CLIENTE)}
 
 
-                ${botonMovimiento(
-        '↩️',
-        'RETIRO DE CLIENTE',
-        'Retira cilindros vacíos',
-        TIPOS_MOVIMIENTO.RETIRO_CLIENTE
-    )}
+                ${h(`↩️`,`RETIRO DE CLIENTE`,`Retira cilindros vacíos`,B.RETIRO_CLIENTE)}
 
 
-                ${botonMovimiento(
-        '⇄',
-        'ENTREGA + RETIRO',
-        'Entrega llenos y recibe vacíos',
-        TIPOS_MOVIMIENTO.ENTREGA_RETIRO
-    )}
+                ${h(`⇄`,`ENTREGA + RETIRO`,`Entrega llenos y recibe vacíos`,B.ENTREGA_RETIRO)}
 
 
-                ${botonMovimiento(
-        '🏭',
-        'SALIDA A PLANTA',
-        'Envía cilindros vacíos a planta',
-        TIPOS_MOVIMIENTO.SALIDA_PLANTA
-    )}
+                ${h(`🏭`,`SALIDA A PLANTA`,`Envía cilindros vacíos a planta`,B.SALIDA_PLANTA)}
 
 
-                ${botonMovimiento(
-        '🏭',
-        'REGRESO DE PLANTA',
-        'Recibe cilindros llenos',
-        TIPOS_MOVIMIENTO.REGRESO_PLANTA
-    )}
+                ${h(`🏭`,`REGRESO DE PLANTA`,`Recibe cilindros llenos`,B.REGRESO_PLANTA)}
 
 
-                ${botonMovimiento(
-        '🔄',
-        'TRASLADO ENTRE CAMIONES',
-        'Mueve cilindros entre camiones',
-        TIPOS_MOVIMIENTO.TRASLADO
-    )}
+                ${h(`🔄`,`TRASLADO ENTRE CAMIONES`,`Mueve cilindros entre camiones`,B.TRASLADO)}
 
             </div>
 
@@ -983,136 +591,33 @@ function mostrarTiposMovimiento() {
             </button>
 
         </main>
-    `;
-
-
-    document
-        .querySelectorAll('[data-movement]')
-        .forEach(button => {
-
-            button.addEventListener(
-                'click',
-                () => abrirFormularioMovimiento(
-                    button.dataset.movement
-                )
-            );
-        });
-
-
-    document
-        .getElementById('btnVolver')
-        .addEventListener(
-            'click',
-            () => {
-                paginaActual = 'movimientos';
-                render();
-            }
-        );
-}
-
-
-function botonMovimiento(
-    icon,
-    titulo,
-    descripcion,
-    tipo
-) {
-
-    return `
+    `,document.querySelectorAll(`[data-movement]`).forEach(e=>{e.addEventListener(`click`,()=>x(e.dataset.movement))}),document.getElementById(`btnVolver`).addEventListener(`click`,()=>{t=`movimientos`,c()})}function h(e,t,n,r){return`
 
         <button
             class="movement-button"
-            data-movement="${tipo}"
+            data-movement="${r}"
         >
 
             <span class="icon">
-                ${icon}
+                ${e}
             </span>
 
             <span>
 
                 <strong>
-                    ${titulo}
+                    ${t}
                 </strong>
 
                 <small>
-                    ${descripcion}
+                    ${n}
                 </small>
 
             </span>
 
         </button>
-    `;
-}
+    `}async function x(e){switch(e){case B.ENTREGA_CLIENTE:await S();break;case B.RETIRO_CLIENTE:await w();break;case B.ENTREGA_RETIRO:await D();break;case B.SALIDA_PLANTA:await O();break;case B.REGRESO_PLANTA:await j();break;case B.TRASLADO:await N()}}async function S(){let t=await E();e.innerHTML=`
 
-
-/* =====================================================
-   FORMULARIOS
-===================================================== */
-
-async function abrirFormularioMovimiento(tipo) {
-
-    switch (tipo) {
-
-        case TIPOS_MOVIMIENTO.ENTREGA_CLIENTE:
-
-            await formularioEntrega();
-
-            break;
-
-
-        case TIPOS_MOVIMIENTO.RETIRO_CLIENTE:
-
-            await formularioRetiro();
-
-            break;
-
-
-        case TIPOS_MOVIMIENTO.ENTREGA_RETIRO:
-
-            await formularioEntregaRetiro();
-
-            break;
-
-
-        case TIPOS_MOVIMIENTO.SALIDA_PLANTA:
-
-            await formularioSalidaPlanta();
-
-            break;
-
-
-        case TIPOS_MOVIMIENTO.REGRESO_PLANTA:
-
-            await formularioRegresoPlanta();
-
-            break;
-
-
-        case TIPOS_MOVIMIENTO.TRASLADO:
-
-            await formularioTraslado();
-
-            break;
-    }
-}
-
-
-/* =====================================================
-   ENTREGA A CLIENTE
-===================================================== */
-
-async function formularioEntrega() {
-
-    const clientes =
-        await obtenerClientes();
-
-
-    app.innerHTML = `
-
-        ${cabeceraFormulario(
-        '🚚 ENTREGA A CLIENTE'
-    )}
+        ${R(`🚚 ENTREGA A CLIENTE`)}
 
 
         <main class="main-content">
@@ -1120,7 +625,7 @@ async function formularioEntrega() {
             <form id="formMovimiento">
 
 
-                ${selectClientes(clientes)}
+                ${G(t)}
 
 
                 <div class="form-group">
@@ -1181,77 +686,14 @@ async function formularioEntrega() {
                 </div>
 
 
-                ${botonesFormulario()}
+                ${H()}
 
             </form>
 
         </main>
-    `;
+    `,J(),document.getElementById(`formMovimiento`).addEventListener(`submit`,async e=>{e.preventDefault();let t=new FormData(e.target);try{await ee({idCliente:t.get(`idCliente`),camion:t.get(`camion`),llenos:t.get(`llenos`),observacion:t.get(`observacion`)}),Y(`ENTREGA REGISTRADA`)}catch(e){X(e.message)}})}async function w(){let t=await E();e.innerHTML=`
 
-
-    conectarCancelar();
-
-
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const form =
-                    new FormData(event.target);
-
-                try {
-
-                    await entregaCliente({
-
-                        idCliente:
-                            form.get('idCliente'),
-
-                        camion:
-                            form.get('camion'),
-
-                        llenos:
-                            form.get('llenos'),
-
-                        observacion:
-                            form.get('observacion')
-
-                    });
-
-
-                    mostrarExito(
-                        'ENTREGA REGISTRADA'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
-            }
-        );
-}
-
-
-/* =====================================================
-   RETIRO
-===================================================== */
-
-async function formularioRetiro() {
-
-    const clientes =
-        await obtenerClientes();
-
-
-    app.innerHTML = `
-
-        ${cabeceraFormulario(
-        '↩️ RETIRO DE CLIENTE'
-    )}
+        ${R(`↩️ RETIRO DE CLIENTE`)}
 
 
         <main class="main-content">
@@ -1259,7 +701,7 @@ async function formularioRetiro() {
             <form id="formMovimiento">
 
 
-                ${selectClientes(clientes)}
+                ${G(t)}
 
 
                 <div class="form-group">
@@ -1336,112 +778,14 @@ async function formularioRetiro() {
                 </div>
 
 
-                ${botonesFormulario()}
+                ${H()}
 
             </form>
 
         </main>
-    `;
+    `,J();let n=document.getElementById(`retiroEspecial`),r=document.getElementById(`observacionRetiro`);n.addEventListener(`change`,()=>{n.checked?(r.required=!0,r.placeholder=`Obligatoria: explica por qué este saldo no estaba registrado.`):(r.required=!1,r.placeholder=`Opcional`)}),document.getElementById(`formMovimiento`).addEventListener(`submit`,async e=>{e.preventDefault();let t=new FormData(e.target);try{await te({idCliente:t.get(`idCliente`),camion:t.get(`camion`),cantidad:t.get(`vacios`),observacion:t.get(`observacion`),retiroEspecial:t.get(`retiroEspecial`)===`on`}),Y(`RETIRO REGISTRADO`)}catch(e){X(e.message)}})}async function D(){let t=await E();e.innerHTML=`
 
-
-    conectarCancelar();
-
-
-    const checkboxEspecial =
-        document.getElementById(
-            'retiroEspecial'
-        );
-
-    const campoObservacion =
-        document.getElementById(
-            'observacionRetiro'
-        );
-
-
-    checkboxEspecial.addEventListener(
-        'change',
-        () => {
-
-            if (checkboxEspecial.checked) {
-
-                campoObservacion.required = true;
-
-                campoObservacion.placeholder =
-                    'Obligatoria: explica por qué este saldo no estaba registrado.';
-
-            } else {
-
-                campoObservacion.required = false;
-
-                campoObservacion.placeholder =
-                    'Opcional';
-            }
-        }
-    );
-
-
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const form =
-                    new FormData(event.target);
-
-                try {
-
-                    await retiroCliente({
-
-                        idCliente:
-                            form.get('idCliente'),
-
-                        camion:
-                            form.get('camion'),
-
-                        cantidad:
-                            form.get('vacios'),
-
-                        observacion:
-                            form.get('observacion'),
-
-                        retiroEspecial:
-                            form.get('retiroEspecial') === 'on'
-
-                    });
-
-
-                    mostrarExito(
-                        'RETIRO REGISTRADO'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
-            }
-        );
-}
-
-/* =====================================================
-   ENTREGA + RETIRO
-===================================================== */
-
-async function formularioEntregaRetiro() {
-
-    const clientes =
-        await obtenerClientes();
-
-
-    app.innerHTML = `
-
-        ${cabeceraFormulario(
-        '⇄ ENTREGA + RETIRO'
-    )}
+        ${R(`⇄ ENTREGA + RETIRO`)}
 
 
         <main class="main-content">
@@ -1449,7 +793,7 @@ async function formularioEntregaRetiro() {
             <form id="formMovimiento">
 
 
-                ${selectClientes(clientes)}
+                ${G(t)}
 
 
                 <div class="form-group">
@@ -1538,139 +882,14 @@ async function formularioEntregaRetiro() {
                 </div>
 
 
-                ${botonesFormulario()}
+                ${H()}
 
             </form>
 
         </main>
-    `;
+    `,J();let n=document.querySelector(`[name="idCliente"]`),r=document.querySelector(`[name="llenos"]`),a=document.querySelector(`[name="vacios"]`);async function o(){let e=await i(`clientes`,n.value);if(!e)return;let t=Number(r.value)||0,o=Number(a.value)||0,s=(e.pendientes_actuales||0)+t-o;document.getElementById(`previewPendiente`).textContent=`Pendientes después: ${s}`}n.addEventListener(`change`,o),r.addEventListener(`input`,o),a.addEventListener(`input`,o),document.getElementById(`formMovimiento`).addEventListener(`submit`,async e=>{e.preventDefault();let t=new FormData(e.target);try{await ne({idCliente:t.get(`idCliente`),camion:t.get(`camion`),llenos:t.get(`llenos`),vacios:t.get(`vacios`),observacion:t.get(`observacion`)}),Y(`ENTREGA + RETIRO REGISTRADO`)}catch(e){X(e.message)}})}async function O(){e.innerHTML=`
 
-
-    conectarCancelar();
-
-
-    const selectCliente =
-        document.querySelector(
-            '[name="idCliente"]'
-        );
-
-    const inputLlenos =
-        document.querySelector(
-            '[name="llenos"]'
-        );
-
-    const inputVacios =
-        document.querySelector(
-            '[name="vacios"]'
-        );
-
-    async function actualizarPreview() {
-
-        const cliente =
-            await obtener(
-                'clientes',
-                selectCliente.value
-            );
-
-        if (!cliente) {
-            return;
-        }
-
-        const llenos =
-            Number(inputLlenos.value) || 0;
-
-        const vacios =
-            Number(inputVacios.value) || 0;
-
-        const resultado =
-            (cliente.pendientes_actuales || 0)
-            + llenos
-            - vacios;
-
-        document
-            .getElementById(
-                'previewPendiente'
-            )
-            .textContent =
-            `Pendientes después: ${resultado}`;
-    }
-
-
-    selectCliente.addEventListener(
-        'change',
-        actualizarPreview
-    );
-
-    inputLlenos.addEventListener(
-        'input',
-        actualizarPreview
-    );
-
-    inputVacios.addEventListener(
-        'input',
-        actualizarPreview
-    );
-
-
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const form =
-                    new FormData(event.target);
-
-                try {
-
-                    await entregaRetiro({
-
-                        idCliente:
-                            form.get('idCliente'),
-
-                        camion:
-                            form.get('camion'),
-
-                        llenos:
-                            form.get('llenos'),
-
-                        vacios:
-                            form.get('vacios'),
-
-                        observacion:
-                            form.get('observacion')
-
-                    });
-
-
-                    mostrarExito(
-                        'ENTREGA + RETIRO REGISTRADO'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
-            }
-        );
-}
-
-
-/* =====================================================
-   SALIDA A PLANTA
-===================================================== */
-
-async function formularioSalidaPlanta() {
-
-    app.innerHTML = `
-
-        ${cabeceraFormulario(
-        '🏭 SALIDA A PLANTA'
-    )}
+        ${R(`🏭 SALIDA A PLANTA`)}
 
 
         <main class="main-content">
@@ -1736,74 +955,14 @@ async function formularioSalidaPlanta() {
                 </div>
 
 
-                ${botonesFormulario()}
+                ${H()}
 
             </form>
 
         </main>
-    `;
+    `,J(),document.getElementById(`formMovimiento`).addEventListener(`submit`,async e=>{e.preventDefault();let t=new FormData(e.target);try{await re({camion:t.get(`camion`),vacios:t.get(`vacios`),observacion:t.get(`observacion`)}),Y(`SALIDA A PLANTA REGISTRADA`)}catch(e){X(e.message)}})}async function j(){let t=await z();e.innerHTML=`
 
-
-    conectarCancelar();
-
-
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const form =
-                    new FormData(event.target);
-
-                try {
-
-                    await salidaPlanta({
-
-                        camion:
-                            form.get('camion'),
-
-                        vacios:
-                            form.get('vacios'),
-
-                        observacion:
-                            form.get('observacion')
-
-                    });
-
-
-                    mostrarExito(
-                        'SALIDA A PLANTA REGISTRADA'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
-            }
-        );
-}
-
-
-/* =====================================================
-   REGRESO DE PLANTA
-===================================================== */
-
-async function formularioRegresoPlanta() {
-
-    const viajes =
-        await obtenerViajesAbiertos();
-
-
-    app.innerHTML = `
-
-        ${cabeceraFormulario(
-        '🏭 REGRESO DE PLANTA'
-    )}
+        ${R(`🏭 REGRESO DE PLANTA`)}
 
 
         <main class="main-content">
@@ -1827,36 +986,27 @@ async function formularioRegresoPlanta() {
                             Selecciona el viaje
                         </option>
 
-                        ${viajes
-            .map(viaje => `
+                        ${t.map(e=>`
                                     <option
-                                        value="${viaje.id_viaje}"
+                                        value="${e.id_viaje}"
                                     >
-                                        ${viaje.camion}
+                                        ${e.camion}
                                         — enviados:
-                                        ${viaje.vacios_enviados}
-                                        — ${new Date(
-                viaje.fecha_salida
-            ).toLocaleString('es-EC')}
+                                        ${e.vacios_enviados}
+                                        — ${new Date(e.fecha_salida).toLocaleString(`es-EC`)}
                                     </option>
-                                `)
-            .join('')
-        }
+                                `).join(``)}
 
                     </select>
 
                 </div>
 
 
-                ${viajes.length === 0
-
-            ? `
+                ${t.length===0?`
                         <div class="status-bar status-warning">
                             🟡 No hay viajes a planta abiertos.
                         </div>
-                      `
-            : ''
-        }
+                      `:``}
 
 
                 <div class="form-group">
@@ -1872,7 +1022,7 @@ async function formularioRegresoPlanta() {
                         min="1"
                         step="1"
                         required
-                        ${viajes.length === 0 ? 'disabled' : ''}
+                        ${t.length===0?`disabled`:``}
                     >
 
                 </div>
@@ -1893,70 +1043,14 @@ async function formularioRegresoPlanta() {
                 </div>
 
 
-                ${botonesFormulario()}
+                ${H()}
 
             </form>
 
         </main>
-    `;
+    `,J(),document.getElementById(`formMovimiento`).addEventListener(`submit`,async e=>{e.preventDefault();let t=new FormData(e.target);try{await ie({idViaje:t.get(`idViaje`),llenos:t.get(`llenos`),observacion:t.get(`observacion`)}),Y(`REGRESO DE PLANTA REGISTRADO`)}catch(e){X(e.message)}})}async function N(){e.innerHTML=`
 
-
-    conectarCancelar();
-
-
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const form =
-                    new FormData(event.target);
-
-                try {
-
-                    await regresoPlanta({
-
-                        idViaje:
-                            form.get('idViaje'),
-
-                        llenos:
-                            form.get('llenos'),
-
-                        observacion:
-                            form.get('observacion')
-
-                    });
-
-
-                    mostrarExito(
-                        'REGRESO DE PLANTA REGISTRADO'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
-            }
-        );
-}
-
-
-/* =====================================================
-   TRASLADO
-===================================================== */
-
-async function formularioTraslado() {
-
-    app.innerHTML = `
-
-        ${cabeceraFormulario(
-        '🔄 TRASLADO ENTRE CAMIONES'
-    )}
+        ${R(`🔄 TRASLADO ENTRE CAMIONES`)}
 
 
         <main class="main-content">
@@ -2072,78 +1166,12 @@ async function formularioTraslado() {
                 </div>
 
 
-                ${botonesFormulario()}
+                ${H()}
 
             </form>
 
         </main>
-    `;
-
-
-    conectarCancelar();
-
-
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const form =
-                    new FormData(event.target);
-
-                try {
-
-                    await trasladoCamiones({
-
-                        origen:
-                            form.get('origen'),
-
-                        destino:
-                            form.get('destino'),
-
-                        tipoCilindro:
-                            form.get('tipoCilindro'),
-
-                        cantidad:
-                            form.get('cantidad'),
-
-                        observacion:
-                            form.get('observacion')
-
-                    });
-
-
-                    mostrarExito(
-                        'TRASLADO REGISTRADO'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
-            }
-        );
-}
-
-
-/* =====================================================
-   CLIENTES
-===================================================== */
-
-async function renderClientes() {
-
-    const clientes =
-        await obtenerClientes();
-
-    const disponibles =
-        await obtenerPendientesInicialesSinAsignar();
-
-    app.innerHTML = `
+    `,J(),document.getElementById(`formMovimiento`).addEventListener(`submit`,async e=>{e.preventDefault();let t=new FormData(e.target);try{await ae({origen:t.get(`origen`),destino:t.get(`destino`),tipoCilindro:t.get(`tipoCilindro`),cantidad:t.get(`cantidad`),observacion:t.get(`observacion`)}),Y(`TRASLADO REGISTRADO`)}catch(e){X(e.message)}})}async function P(){let t=await E();e.innerHTML=`
 
         <header class="app-header">
 
@@ -2179,7 +1207,7 @@ async function renderClientes() {
                 </div>
 
                 <div class="stat-value">
-                    ${disponibles}
+                    ${await k()}
                 </div>
 
                 <div class="list-item-sub">
@@ -2198,9 +1226,7 @@ async function renderClientes() {
                 </div>
 
 
-                ${clientes.length === 0
-
-            ? `
+                ${t.length===0?`
                         <div class="empty-state">
 
                             <div class="icon">
@@ -2210,89 +1236,50 @@ async function renderClientes() {
                             Todavía no hay clientes.
 
                         </div>
-                      `
-
-            : `
+                      `:`
                         <div class="list">
 
-                            ${clientes
-                .map(cliente => `
+                            ${t.map(e=>`
 
                                     <div class="list-item">
 
                                         <div class="list-item-top">
 
                                             <span class="list-item-title">
-                                                ${cliente.nombre}
+                                                ${e.nombre}
                                             </span>
 
                                             <span class="badge badge-success">
-                                                ${cliente.pendientes_actuales}
+                                                ${e.pendientes_actuales}
                                             </span>
 
                                         </div>
 
                                         <div class="list-item-sub">
-                                            📦 ${cliente.pendientes_actuales}
+                                            📦 ${e.pendientes_actuales}
                                             pendientes
                                         </div>
 
-                                        ${cliente.telefono
-                        ? `
+                                        ${e.telefono?`
                                                     <div class="list-item-sub">
-                                                        📞 ${cliente.telefono}
+                                                        📞 ${e.telefono}
                                                     </div>
-                                                  `
-                        : ''
-                    }
+                                                  `:``}
 
                                     </div>
 
-                                `)
-                .join('')}
+                                `).join(``)}
 
                         </div>
-                      `
-        }
+                      `}
 
             </div>
 
         </main>
 
 
-        ${renderNav('clientes')}
-    `;
-
-
-    document
-        .getElementById('btnNuevoCliente')
-        .addEventListener(
-            'click',
-            formularioCliente
-        );
-
-
-    document
-        .getElementById('btnPendientesIniciales')
-        .addEventListener(
-            'click',
-            formularioPendientesIniciales
-        );
-
-
-    registrarNavegacion();
-}
-
-async function formularioPendientesIniciales() {
-
-    const clientes =
-        await obtenerClientes();
-
-    const disponibles =
-        await obtenerPendientesInicialesSinAsignar();
-
-
-    app.innerHTML = `
+        ${Z(`clientes`)}
+    `,document.getElementById(`btnNuevoCliente`).addEventListener(`click`,I),document.getElementById(`btnPendientesIniciales`).addEventListener(`click`,F),Q()}async function F(){let t=await E(),n=await k();e.innerHTML=`
 
         <header class="app-header">
 
@@ -2315,7 +1302,7 @@ async function formularioPendientesIniciales() {
                 </div>
 
                 <div class="stat-value">
-                    ${disponibles}
+                    ${n}
                 </div>
 
             </div>
@@ -2330,12 +1317,12 @@ async function formularioPendientesIniciales() {
 
                 <form id="formPendientesIniciales">
 
-                    ${clientes.map(cliente => `
+                    ${t.map(e=>`
 
                         <div class="form-group">
 
                             <label>
-                                ${cliente.nombre}
+                                ${e.nombre}
                             </label>
 
                             <input
@@ -2343,13 +1330,13 @@ async function formularioPendientesIniciales() {
                                 min="0"
                                 step="1"
                                 class="input-pendiente-inicial"
-                                data-id="${cliente.id_cliente}"
+                                data-id="${e.id_cliente}"
                                 value="0"
                             >
 
                         </div>
 
-                    `).join('')}
+                    `).join(``)}
 
 
                     <div class="card">
@@ -2388,157 +1375,10 @@ async function formularioPendientesIniciales() {
         </main>
 
 
-        ${renderNav('clientes')}
-    `;
+        ${Z(`clientes`)}
+    `;let r=document.querySelectorAll(`.input-pendiente-inicial`),i=document.getElementById(`totalPendientesAsignar`);function a(){let e=0;r.forEach(t=>{let n=Number(t.value)||0;e+=n}),i.textContent=e}r.forEach(e=>{e.addEventListener(`input`,a)}),document.getElementById(`formPendientesIniciales`).addEventListener(`submit`,async e=>{e.preventDefault();let t=[];r.forEach(e=>{t.push({idCliente:e.dataset.id,cantidad:Number(e.value)||0})});let i=t.reduce((e,t)=>e+t.cantidad,0);if(i===0){alert(`Debes asignar al menos un pendiente.`);return}if(i>n){alert(`No puedes asignar ${i}. Solo hay ${n} pendientes iniciales disponibles.`);return}try{await A(t),alert(`Pendientes iniciales asignados correctamente.`),await P()}catch(e){alert(e.message)}}),document.getElementById(`btnCancelarPendientesIniciales`).addEventListener(`click`,P),Q()}function I(){e.innerHTML=`
 
-
-    const inputs =
-        document.querySelectorAll(
-            '.input-pendiente-inicial'
-        );
-
-    const total =
-        document.getElementById(
-            'totalPendientesAsignar'
-        );
-
-
-    function actualizarTotal() {
-
-        let suma = 0;
-
-        inputs.forEach(input => {
-
-            const cantidad =
-                Number(input.value) || 0;
-
-            suma += cantidad;
-
-        });
-
-        total.textContent = suma;
-    }
-
-
-    inputs.forEach(input => {
-
-        input.addEventListener(
-            'input',
-            actualizarTotal
-        );
-
-    });
-
-
-    document
-        .getElementById(
-            'formPendientesIniciales'
-        )
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const asignaciones =
-                    [];
-
-                inputs.forEach(input => {
-
-                    asignaciones.push({
-
-                        idCliente:
-                            input.dataset.id,
-
-                        cantidad:
-                            Number(input.value) || 0
-
-                    });
-
-                });
-
-
-                const totalAsignar =
-                    asignaciones.reduce(
-                        (suma, item) =>
-                            suma +
-                            item.cantidad,
-                        0
-                    );
-
-
-                if (totalAsignar === 0) {
-
-                    alert(
-                        'Debes asignar al menos un pendiente.'
-                    );
-
-                    return;
-                }
-
-
-                if (
-                    totalAsignar >
-                    disponibles
-                ) {
-
-                    alert(
-                        `No puedes asignar ${totalAsignar}. Solo hay ${disponibles} pendientes iniciales disponibles.`
-                    );
-
-                    return;
-                }
-
-
-                try {
-
-                    await asignarPendientesIniciales(
-                        asignaciones
-                    );
-
-
-                    alert(
-                        'Pendientes iniciales asignados correctamente.'
-                    );
-
-
-                    await renderClientes();
-
-                } catch (error) {
-
-                    alert(
-                        error.message
-                    );
-
-                }
-
-            }
-        );
-
-
-    document
-        .getElementById(
-            'btnCancelarPendientesIniciales'
-        )
-        .addEventListener(
-            'click',
-            renderClientes
-        );
-
-
-    registrarNavegacion();
-}
-/* =====================================================
-   NUEVO CLIENTE
-===================================================== */
-
-function formularioCliente() {
-
-    app.innerHTML = `
-
-        ${cabeceraFormulario(
-        '👤 NUEVO CLIENTE'
-    )}
+        ${R(`👤 NUEVO CLIENTE`)}
 
 
         <main class="main-content">
@@ -2638,69 +1478,7 @@ function formularioCliente() {
             </form>
 
         </main>
-    `;
-
-
-    conectarCancelar();
-
-
-    document
-        .getElementById('formCliente')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const form =
-                    new FormData(event.target);
-
-                try {
-
-                    await crearCliente({
-
-                        nombre:
-                            form.get('nombre'),
-
-                        telefono:
-                            form.get('telefono'),
-
-                        direccion:
-                            form.get('direccion'),
-
-                        sector:
-                            form.get('sector'),
-
-                        observacion:
-                            form.get('observacion')
-                    });
-
-
-                    mostrarExito(
-                        'CLIENTE REGISTRADO'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
-            }
-        );
-}
-
-
-/* =====================================================
-   SINCRONIZACIÓN
-===================================================== */
-
-async function renderSync() {
-
-    const estado =
-        await obtenerEstadoSync();
-
-    app.innerHTML = `
+    `,J(),document.getElementById(`formCliente`).addEventListener(`submit`,async e=>{e.preventDefault();let t=new FormData(e.target);try{await T({nombre:t.get(`nombre`),telefono:t.get(`telefono`),direccion:t.get(`direccion`),sector:t.get(`sector`),observacion:t.get(`observacion`)}),Y(`CLIENTE REGISTRADO`)}catch(e){X(e.message)}})}async function L(){let t=await U();e.innerHTML=`
 
         <header class="app-header">
 
@@ -2722,20 +1500,15 @@ async function renderSync() {
                 </div>
 
 
-                ${estado.total === 0
-
-            ? `
+                ${t.total===0?`
                         <div class="status-bar status-success">
                             🟢 No hay elementos pendientes
                         </div>
-                      `
-
-            : `
+                      `:`
                         <div class="status-bar status-warning">
-                            🟡 ${estado.total} elemento(s) pendiente(s)
+                            🟡 ${t.total} elemento(s) pendiente(s)
                         </div>
-                      `
-        }
+                      `}
 
 
                 <div class="inventory-grid">
@@ -2747,7 +1520,7 @@ async function renderSync() {
                         </span>
 
                         <strong class="number">
-                            ${estado.movimientos}
+                            ${t.movimientos}
                         </strong>
 
                     </div>
@@ -2760,7 +1533,7 @@ async function renderSync() {
                         </span>
 
                         <strong class="number">
-                            ${estado.clientes}
+                            ${t.clientes}
                         </strong>
 
                     </div>
@@ -2788,58 +1561,19 @@ async function renderSync() {
         </main>
 
 
-        ${renderNav('sync')}
-    `;
-
-
-    document
-        .getElementById('btnSync')
-        .addEventListener(
-            'click',
-            () => alert(
-                'La conexión con el PC se implementará después de terminar el motor local.'
-            )
-        );
-
-
-    document
-        .getElementById('btnActualizar')
-        .addEventListener(
-            'click',
-            () => alert(
-                'La actualización PC → móvil se implementará después de la sincronización.'
-            )
-        );
-
-
-    registrarNavegacion();
-}
-
-
-/* =====================================================
-   ELEMENTOS DE FORMULARIO
-===================================================== */
-
-function cabeceraFormulario(titulo) {
-
-    return `
+        ${Z(`sync`)}
+    `,document.getElementById(`btnSync`).addEventListener(`click`,()=>alert(`La conexión con el PC se implementará después de terminar el motor local.`)),document.getElementById(`btnActualizar`).addEventListener(`click`,()=>alert(`La actualización PC → móvil se implementará después de la sincronización.`)),Q()}function R(e){return`
 
         <header class="app-header">
 
-            <h1>${titulo}</h1>
+            <h1>${e}</h1>
 
             <p>
                 Registro de operación
             </p>
 
         </header>
-    `;
-}
-
-
-function botonesFormulario() {
-
-    return `
+    `}function H(){return`
 
         <button
             class="primary-button"
@@ -2856,13 +1590,7 @@ function botonesFormulario() {
         >
             Cancelar
         </button>
-    `;
-}
-
-
-function selectClientes(clientes) {
-
-    return `
+    `}function G(e){return`
 
         <div class="form-group">
 
@@ -2880,24 +1608,19 @@ function selectClientes(clientes) {
                     Selecciona un cliente
                 </option>
 
-                ${clientes
-            .map(cliente => `
+                ${e.map(e=>`
                             <option
-                                value="${cliente.id_cliente}"
+                                value="${e.id_cliente}"
                             >
-                                ${cliente.nombre}
+                                ${e.nombre}
                                 — pendientes:
-                                ${cliente.pendientes_actuales}
+                                ${e.pendientes_actuales}
                             </option>
-                        `)
-            .join('')
-        }
+                        `).join(``)}
 
             </select>
 
-            ${clientes.length === 0
-
-            ? `
+            ${e.length===0?`
                     <small
                         style="
                             display:block;
@@ -2907,42 +1630,10 @@ function selectClientes(clientes) {
                     >
                         Primero debes registrar un cliente.
                     </small>
-                  `
-            : ''
-        }
+                  `:``}
 
         </div>
-    `;
-}
-
-
-function conectarCancelar() {
-
-    const boton =
-        document.getElementById(
-            'btnCancelar'
-        );
-
-    if (!boton) {
-        return;
-    }
-
-    boton.addEventListener(
-        'click',
-        () => {
-            mostrarTiposMovimiento();
-        }
-    );
-}
-
-
-/* =====================================================
-   RESULTADOS
-===================================================== */
-
-function mostrarExito(mensaje) {
-
-    app.innerHTML = `
+    `}function J(){let e=document.getElementById(`btnCancelar`);e&&e.addEventListener(`click`,()=>{m()})}function Y(n){e.innerHTML=`
 
         <main
             class="main-content"
@@ -2968,7 +1659,7 @@ function mostrarExito(mensaje) {
                         margin-bottom:10px;
                     "
                 >
-                    ${mensaje}
+                    ${n}
                 </h2>
 
 
@@ -2994,44 +1685,12 @@ function mostrarExito(mensaje) {
             </div>
 
         </main>
-    `;
-
-
-    document
-        .getElementById('btnContinuar')
-        .addEventListener(
-            'click',
-            () => {
-
-                paginaActual =
-                    'inicio';
-
-                render();
-            }
-        );
-}
-
-
-function mostrarError(mensaje) {
-
-    alert(
-        `⚠️ No se puede registrar\n\n${mensaje}`
-    );
-}
-
-
-/* =====================================================
-   NAVEGACIÓN INFERIOR
-===================================================== */
-
-function renderNav(activo) {
-
-    return `
+    `,document.getElementById(`btnContinuar`).addEventListener(`click`,()=>{t=`inicio`,c()})}function X(e){alert(`⚠️ No se puede registrar\n\n${e}`)}function Z(e){return`
 
         <nav class="bottom-nav">
 
             <button
-                class="${activo === 'inicio' ? 'active' : ''}"
+                class="${e===`inicio`?`active`:``}"
                 data-page="inicio"
             >
 
@@ -3047,7 +1706,7 @@ function renderNav(activo) {
 
 
             <button
-                class="${activo === 'movimientos' ? 'active' : ''}"
+                class="${e===`movimientos`?`active`:``}"
                 data-page="movimientos"
             >
 
@@ -3063,7 +1722,7 @@ function renderNav(activo) {
 
 
             <button
-                class="${activo === 'clientes' ? 'active' : ''}"
+                class="${e===`clientes`?`active`:``}"
                 data-page="clientes"
             >
 
@@ -3079,7 +1738,7 @@ function renderNav(activo) {
 
 
             <button
-                class="${activo === 'sync' ? 'active' : ''}"
+                class="${e===`sync`?`active`:``}"
                 data-page="sync"
             >
 
@@ -3094,31 +1753,7 @@ function renderNav(activo) {
             </button>
 
         </nav>
-    `;
-}
-
-
-function registrarNavegacion() {
-
-    document
-        .querySelectorAll('[data-page]')
-        .forEach(button => {
-
-            button.addEventListener(
-                'click',
-                () => {
-
-                    paginaActual =
-                        button.dataset.page;
-
-                    render();
-                }
-            );
-        });
-}
-async function mostrarApertura() {
-
-    app.innerHTML = `
+    `}function Q(){document.querySelectorAll(`[data-page]`).forEach(e=>{e.addEventListener(`click`,()=>{t=e.dataset.page,c()})})}async function de(){e.innerHTML=`
 
         <header class="app-header">
 
@@ -3250,109 +1885,9 @@ async function mostrarApertura() {
         </main>
 
 
-        ${renderNav('inicio')}
+        ${Z(`inicio`)}
 
-    `;
-
-
-    document
-        .getElementById('formApertura')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-
-                try {
-
-                    await configurarApertura({
-
-                        rojoLlenos:
-                            Number(
-                                document.getElementById(
-                                    'rojoLlenos'
-                                ).value
-                            ),
-
-                        rojoVacios:
-                            Number(
-                                document.getElementById(
-                                    'rojoVacios'
-                                ).value
-                            ),
-
-                        blancoLlenos:
-                            Number(
-                                document.getElementById(
-                                    'blancoLlenos'
-                                ).value
-                            ),
-
-                        blancoVacios:
-                            Number(
-                                document.getElementById(
-                                    'blancoVacios'
-                                ).value
-                            ),
-
-                        clientesPendientes:
-                            Number(
-                                document.getElementById(
-                                    'clientesPendientes'
-                                ).value
-                            )
-
-                    });
-
-
-                    alert(
-                        'Apertura configurada correctamente.'
-                    );
-
-
-                    await renderInicio();
-
-
-                } catch (error) {
-
-                    alert(error.message);
-
-                }
-
-            }
-        );
-
-
-    document
-        .getElementById('btnCancelarApertura')
-        ?.addEventListener(
-            'click',
-            renderInicio
-        );
-
-
-    registrarNavegacion();
-}
-/* =====================================================
-   REPORTES
-===================================================== */
-
-async function renderReportes() {
-    const vendidos = await vendidosHoy();
-    const clientes = await vendidosPorCliente();
-    const listaClientes = await obtenerTodos('clientes');
-
-    const nombresClientes = Object.fromEntries(
-        listaClientes.map(cliente => [
-            cliente.id_cliente,
-            cliente.nombre
-        ])
-    );
-
-    const app = document.getElementById('app');
-
-    app.innerHTML = `
+    `,document.getElementById(`formApertura`).addEventListener(`submit`,async e=>{e.preventDefault();try{await _({rojoLlenos:Number(document.getElementById(`rojoLlenos`).value),rojoVacios:Number(document.getElementById(`rojoVacios`).value),blancoLlenos:Number(document.getElementById(`blancoLlenos`).value),blancoVacios:Number(document.getElementById(`blancoVacios`).value),clientesPendientes:Number(document.getElementById(`clientesPendientes`).value)}),alert(`Apertura configurada correctamente.`),await l()}catch(e){alert(e.message)}}),document.getElementById(`btnCancelarApertura`)?.addEventListener(`click`,l),Q()}async function fe(){let e=await K(),t=await le(),n=await a(`clientes`),r=Object.fromEntries(n.map(e=>[e.id_cliente,e.nombre])),i=document.getElementById(`app`);i.innerHTML=`
         <div class="page">
 
             <header class="page-header">
@@ -3364,7 +1899,7 @@ async function renderReportes() {
                 <h2>VENDIDOS HOY</h2>
 
                 <div class="report-number">
-                    ${vendidos}
+                    ${e}
                 </div>
 
                 <p>cilindros entregados</p>
@@ -3419,142 +1954,40 @@ async function renderReportes() {
 
                 <h2>VENDIDOS POR CLIENTE</h2>
 
-                ${Object.keys(clientes).length === 0
-            ? '<p>No hay ventas registradas.</p>'
-            : `
+                ${Object.keys(t).length===0?`<p>No hay ventas registradas.</p>`:`
                             <div class="report-list">
 
-                                ${Object.entries(clientes)
-                .sort((a, b) => b[1] - a[1])
-                .map(([idCliente, cantidad]) => `
+                                ${Object.entries(t).sort((e,t)=>t[1]-e[1]).map(([e,t])=>`
                                             <div class="report-row">
 
                                                 <span>
-                                                    ${nombresClientes[idCliente]
-                    || idCliente
-                    }
+                                                    ${r[e]||e}
                                                 </span>
 
                                                 <strong>
-                                                    ${cantidad}
+                                                    ${t}
                                                 </strong>
 
                                             </div>
-                                        `)
-                .join('')
-            }
+                                        `).join(``)}
 
                             </div>
-                        `
-        }
+                        `}
 
             </section>
 
-            ${renderNav('reportes')}
+            ${Z(`reportes`)}
 
         </div>
-    `;
-
-    document
-        .getElementById('btnFechaReporte')
-        .addEventListener('click', async () => {
-
-            const fecha =
-                document.getElementById('fechaReporte').value;
-
-            if (!fecha) {
-                alert('Selecciona una fecha.');
-                return;
-            }
-
-            const cantidad =
-                await vendidosPorFecha(fecha);
-
-            document.getElementById(
-                'resultadoFecha'
-            ).innerHTML = `
+    `,document.getElementById(`btnFechaReporte`).addEventListener(`click`,async()=>{let e=document.getElementById(`fechaReporte`).value;if(!e){alert(`Selecciona una fecha.`);return}let t=await se(e);document.getElementById(`resultadoFecha`).innerHTML=`
                 <div class="report-result">
-                    ${cantidad} cilindros vendidos
+                    ${t} cilindros vendidos
                 </div>
-            `;
-        });
-
-    document
-        .getElementById('btnRangoReporte')
-        .addEventListener('click', async () => {
-
-            const inicio =
-                document.getElementById('fechaInicio').value;
-
-            const fin =
-                document.getElementById('fechaFin').value;
-
-            if (!inicio || !fin) {
-                alert('Selecciona las dos fechas.');
-                return;
-            }
-
-            if (inicio > fin) {
-                alert(
-                    'La fecha inicial no puede ser mayor que la final.'
-                );
-                return;
-            }
-
-            const cantidad =
-                await vendidosPorRango(inicio, fin);
-
-            document.getElementById(
-                'resultadoRango'
-            ).innerHTML = `
+            `}),document.getElementById(`btnRangoReporte`).addEventListener(`click`,async()=>{let e=document.getElementById(`fechaInicio`).value,t=document.getElementById(`fechaFin`).value;if(!e||!t){alert(`Selecciona las dos fechas.`);return}if(e>t){alert(`La fecha inicial no puede ser mayor que la final.`);return}let n=await ce(e,t);document.getElementById(`resultadoRango`).innerHTML=`
                 <div class="report-result">
-                    ${cantidad} cilindros vendidos
+                    ${n} cilindros vendidos
                 </div>
-            `;
-        });
-
-    registrarNavegacion();
-} document
-    .getElementById('btnExportarBD')
-    ?.addEventListener('click', async () => {
-
-        try {
-
-            const nombre =
-                await exportarBaseDatos();
-
-            alert(
-                `✅ Respaldo creado correctamente.\n\n${nombre}`
-            );
-
-        } catch (error) {
-
-            console.error(error);
-
-            alert(
-                `❌ No se pudo exportar la base de datos.\n\n${error.message}`
-            );
-        }
-    });
-    /* =====================================================
-   INVENTARIO - ADMINISTRACIÓN
-===================================================== */
-
-async function renderInventario() {
-
-    const inventario =
-        await obtenerInventario();
-
-    const sinAsignar =
-        inventario.sinAsignar || {
-            llenos: 0,
-            vacios: 0
-        };
-
-    const total =
-        calcularTotal(inventario);
-
-    app.innerHTML = `
+            `}),Q()}document.getElementById(`btnExportarBD`)?.addEventListener(`click`,async()=>{try{let e=await o();alert(`✅ Respaldo creado correctamente.\n\n${e}`)}catch(e){console.error(e),alert(`❌ No se pudo exportar la base de datos.\n\n${e.message}`)}});async function $(){let n=await p(),r=n.sinAsignar||{llenos:0,vacios:0};e.innerHTML=`
 
         <section class="card">
 
@@ -3562,7 +1995,7 @@ async function renderInventario() {
 
             <p>
                 Total de la empresa:
-                <strong>${total}</strong>
+                <strong>${g(n)}</strong>
             </p>
 
         </section>
@@ -3574,25 +2007,25 @@ async function renderInventario() {
 
             <p>
                 🔴 Rojo:
-                ${inventario.rojo.llenos || 0} llenos /
-                ${inventario.rojo.vacios || 0} vacíos
+                ${n.rojo.llenos||0} llenos /
+                ${n.rojo.vacios||0} vacíos
             </p>
 
             <p>
                 ⚪ Blanco:
-                ${inventario.blanco.llenos || 0} llenos /
-                ${inventario.blanco.vacios || 0} vacíos
+                ${n.blanco.llenos||0} llenos /
+                ${n.blanco.vacios||0} vacíos
             </p>
 
             <p>
                 👥 Clientes:
-                ${inventario.clientes.pendientes || 0}
+                ${n.clientes.pendientes||0}
             </p>
 
             <p>
                 📦 Sin asignar:
-                ${sinAsignar.llenos || 0} llenos /
-                ${sinAsignar.vacios || 0} vacíos
+                ${r.llenos||0} llenos /
+                ${r.vacios||0} vacíos
             </p>
 
         </section>
@@ -3701,8 +2134,8 @@ async function renderInventario() {
 
             <p>
                 Disponible sin asignar:
-                ${sinAsignar.llenos || 0} llenos /
-                ${sinAsignar.vacios || 0} vacíos
+                ${r.llenos||0} llenos /
+                ${r.vacios||0} vacíos
             </p>
 
             <form id="formAsignarCamion">
@@ -3756,197 +2189,4 @@ async function renderInventario() {
             </button>
 
         </section>
-    `;
-
-
-    /* =================================================
-       AÑADIR
-    ================================================= */
-
-    document
-        .getElementById('formAgregarSinAsignar')
-        ?.addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                try {
-
-                    await agregarSinAsignar({
-
-                        llenos:
-                            Number(
-                                document
-                                    .getElementById('agregarLlenos')
-                                    .value
-                            ),
-
-                        vacios:
-                            Number(
-                                document
-                                    .getElementById('agregarVacios')
-                                    .value
-                            ),
-
-                        observacion:
-                            document
-                                .getElementById('agregarObservacion')
-                                .value
-                                .trim()
-
-                    });
-
-
-                    alert(
-                        'Cilindros añadidos correctamente.'
-                    );
-
-
-                    await renderInventario();
-
-                } catch (error) {
-
-                    alert(
-                        error.message
-                    );
-
-                }
-
-            }
-        );
-
-
-    /* =================================================
-       RETIRAR
-    ================================================= */
-
-    document
-        .getElementById('formRetirarSinAsignar')
-        ?.addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                try {
-
-                    await retirarSinAsignar({
-
-                        llenos:
-                            Number(
-                                document
-                                    .getElementById('retirarLlenos')
-                                    .value
-                            ),
-
-                        vacios:
-                            Number(
-                                document
-                                    .getElementById('retirarVacios')
-                                    .value
-                            ),
-
-                        observacion:
-                            document
-                                .getElementById('retirarObservacion')
-                                .value
-                                .trim()
-
-                    });
-
-
-                    alert(
-                        'Cilindros retirados correctamente.'
-                    );
-
-
-                    await renderInventario();
-
-                } catch (error) {
-
-                    alert(
-                        error.message
-                    );
-
-                }
-
-            }
-        );
-
-
-    /* =================================================
-       ASIGNAR A CAMIÓN
-    ================================================= */
-
-    document
-        .getElementById('formAsignarCamion')
-        ?.addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                try {
-
-                    await asignarACamion({
-
-                        camion:
-                            document
-                                .getElementById('asignarCamion')
-                                .value,
-
-                        llenos:
-                            Number(
-                                document
-                                    .getElementById('asignarLlenos')
-                                    .value
-                            ),
-
-                        vacios:
-                            Number(
-                                document
-                                    .getElementById('asignarVacios')
-                                    .value
-                            )
-
-                    });
-
-
-                    alert(
-                        'Cilindros asignados correctamente.'
-                    );
-
-
-                    await renderInventario();
-
-                } catch (error) {
-
-                    alert(
-                        error.message
-                    );
-
-                }
-
-            }
-        );
-
-
-    /* =================================================
-       VOLVER
-    ================================================= */
-
-    document
-        .getElementById('btnVolverInicioInventario')
-        ?.addEventListener(
-            'click',
-            () => {
-
-                paginaActual =
-                    'inicio';
-
-                render();
-
-            }
-        );
-}
+    `,document.getElementById(`formAgregarSinAsignar`)?.addEventListener(`submit`,async e=>{e.preventDefault();try{await v({llenos:Number(document.getElementById(`agregarLlenos`).value),vacios:Number(document.getElementById(`agregarVacios`).value),observacion:document.getElementById(`agregarObservacion`).value.trim()}),alert(`Cilindros añadidos correctamente.`),await $()}catch(e){alert(e.message)}}),document.getElementById(`formRetirarSinAsignar`)?.addEventListener(`submit`,async e=>{e.preventDefault();try{await y({llenos:Number(document.getElementById(`retirarLlenos`).value),vacios:Number(document.getElementById(`retirarVacios`).value),observacion:document.getElementById(`retirarObservacion`).value.trim()}),alert(`Cilindros retirados correctamente.`),await $()}catch(e){alert(e.message)}}),document.getElementById(`formAsignarCamion`)?.addEventListener(`submit`,async e=>{e.preventDefault();try{await b({camion:document.getElementById(`asignarCamion`).value,llenos:Number(document.getElementById(`asignarLlenos`).value),vacios:Number(document.getElementById(`asignarVacios`).value)}),alert(`Cilindros asignados correctamente.`),await $()}catch(e){alert(e.message)}}),document.getElementById(`btnVolverInicioInventario`)?.addEventListener(`click`,()=>{t=`inicio`,c()})}}))();
