@@ -282,7 +282,6 @@ export async function entregaCliente({
     cantidad =
         Number(cantidad);
 
-
     if (
         !Number.isInteger(cantidad) ||
         cantidad <= 0
@@ -960,8 +959,6 @@ export async function trasladoCamiones({
 
     vacios =
         Number(vacios);
-
-
     validarCantidad(
         llenos,
         vacios
@@ -1106,19 +1103,18 @@ export async function validarClienteExistente(
    OBTENER MOVIMIENTOS
 ===================================================== */
 
+
 export async function obtenerMovimientos() {
 
     const movimientos =
-        await obtenerTodos(
-            'movimientos'
-        );
+        await obtenerTodos('movimientos');
 
+    return movimientos.sort((a, b) => {
+        const fechaA = new Date(a.fecha_hora || 0);
+        const fechaB = new Date(b.fecha_hora || 0);
 
-    return movimientos.sort(
-        (a, b) =>
-            new Date(b.fecha_hora) -
-            new Date(a.fecha_hora)
-    );
+        return fechaB - fechaA;
+    });
 }
 
 

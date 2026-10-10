@@ -1487,3 +1487,36 @@ textarea.form-control {
         font-size: 30px;
     }
 }
+
+/* Fechas de inicio y fin en horizontal */
+.fechas-horizontales {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+}
+
+.fechas-horizontales .form-group {
+    min-width: 0;
+    margin-bottom: 12px;
+}
+
+.fechas-horizontales input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 10px 4px;
+    font-size: 14px;
+}
+
+/* Lista de movimientos con desplazamiento vertical */
+#listaMovimientos {
+    max-height: 55vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+#listaMovimientos .list {
+    min-width: 0;
+}

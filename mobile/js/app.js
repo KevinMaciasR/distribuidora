@@ -43,7 +43,10 @@ import {
     vendidosHoy,
     vendidosPorFecha,
     vendidosPorRango,
-    vendidosPorCliente
+    obtenerInventarioReporte,
+    vendidosPorClienteRango,
+    obtenerVentasDetallePorFecha,
+    obtenerViajesPlantaPorRango
 } from './reportes.js';
 import '../css/app.css';
 const app = document.getElementById('app');
@@ -759,21 +762,44 @@ async function renderInicio() {
    LISTA DE MOVIMIENTOS
 ===================================================== */
 
+
+
 async function renderMovimientos() {
 
-    const movimientos =
-        await obtenerMovimientos();
+    const movimientos = await obtenerMovimientos();
+    const clientes = await obtenerTodos('clientes');
+
+    const nombresClientes = Object.fromEntries(
+        clientes.map(c => [c.id_cliente, c.nombre])
+    );
+
+    const escaparHTML = (valor) =>
+        String(valor ?? '').replace(/[&<>"']/g, caracter => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        })[caracter]);
+
+    const obtenerFechaLocal = (fechaHora) => {
+        if (!fechaHora) return '';
+
+        return new Date(fechaHora).toLocaleDateString('en-CA', {
+            timeZone: 'America/Guayaquil'
+        });
+    };
+
+    const fechaHoy = new Date().toLocaleDateString('en-CA', {
+        timeZone: 'America/Guayaquil'
+    });
 
     app.innerHTML = `
 
         <header class="app-header">
-
             <h1>MOVIMIENTOS</h1>
-
             <p>Registro operativo</p>
-
         </header>
-
 
         <main class="main-content">
 
@@ -784,125 +810,250 @@ async function renderMovimientos() {
                 ＋ NUEVO MOVIMIENTO
             </button>
 
-
             <div class="card">
 
                 <div class="card-title">
-                    Movimientos recientes
+                    Buscar movimientos
                 </div>
 
+                <div class="form-group">
+                    <label for="fechaInicioMovimientos">
 
-                ${movimientos.length === 0
 
-            ? `
-                        <div class="empty-state">
+<div class="fechas-horizontales">
 
-                            <div class="icon">
-                                📋
-                            </div>
+    <div class="form-group">
+        <label for="fechaInicioMovimientos">
+            Desde
+        </label>
 
-                            No hay movimientos registrados.
+        <input
+            type="date"
+            id="fechaInicioMovimientos"
+            value="${fechaHoy}"
+        >
+    </div>
 
-                        </div>
-                      `
+    <div class="form-group">
+        <label for="fechaFinMovimientos">
+            Hasta
+        </label>
 
-            : `
-                        <div class="list">
+        <input
+            type="date"
+            id="fechaFinMovimientos"
+            value="${fechaHoy}"
+        >
+    </div>
 
-                            ${movimientos
-                .slice(0, 30)
-                .map(m => {
+</div>
+
+                <div class="form-group">
+                    <label for="filtroClienteMovimientos">
+                        Cliente
+                    </label>
+
+                    <select id="filtroClienteMovimientos">
+                        <option value="">Todos</option>
+
+                        ${clientes
+                            .slice()
+                            .sort((a, b) =>
+                                (a.nombre || '').localeCompare(
+                                    b.nombre || '',
+                                    'es'
+                                )
+                            )
+                            .map(c => `
+                                <option value="${escaparHTML(c.id_cliente)}">
+                                    ${escaparHTML(c.nombre)}
+                                </option>
+                            `)
+                            .join('')}
+                    </select>
+                </div>
+
+                <div class="card-title">
+                    Resultados
+                </div>
+
+                <div id="contadorMovimientos"></div>
+
+            </div>
+
+            <div class="card" id="listaMovimientos"></div>
+
+        </main>
+
+        ${renderNav('movimientos')}
+    `;
+
+    const lista =
+        document.getElementById('listaMovimientos');
+
+    const fechaInicio =
+        document.getElementById('fechaInicioMovimientos');
+
+    const fechaFin =
+        document.getElementById('fechaFinMovimientos');
+
+    const filtroCliente =
+        document.getElementById('filtroClienteMovimientos');
+
+    const contador =
+        document.getElementById('contadorMovimientos');
+
+
+    function mostrarMovimientos() {
+
+        const inicio = fechaInicio.value;
+        const fin = fechaFin.value;
+        const clienteSeleccionado = filtroCliente.value;
+
+        if (!inicio || !fin) {
+            contador.textContent = '';
+            lista.innerHTML = `
+                <div class="empty-state">
+                    Selecciona las fechas de inicio y fin.
+                </div>
+            `;
+            return;
+        }
+
+        if (inicio > fin) {
+            contador.textContent = '';
+            lista.innerHTML = `
+                <div class="empty-state">
+                    La fecha de inicio no puede ser posterior
+                    a la fecha de fin.
+                </div>
+            `;
+            return;
+        }
+
+        const filtrados = movimientos.filter(m => {
+
+            const fechaMovimiento = m.fecha_hora
+                ? obtenerFechaLocal(m.fecha_hora)
+                : (m.fecha || '');
+
+            const idCliente =
+                m.cliente || m.id_cliente || '';
+
+            const coincideFecha =
+                fechaMovimiento >= inicio &&
+                fechaMovimiento <= fin;
+
+            const coincideCliente =
+                !clienteSeleccionado ||
+                String(idCliente) === String(clienteSeleccionado);
+
+            return coincideFecha && coincideCliente;
+        });
+
+        contador.textContent =
+            `${filtrados.length} movimiento${filtrados.length === 1 ? '' : 's'}`;
+
+        if (filtrados.length === 0) {
+            lista.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">📋</div>
+                    No hay movimientos para los filtros seleccionados.
+                </div>
+            `;
+            return;
+        }
+
+        lista.innerHTML = `
+            <div class="list">
+
+                ${filtrados.map(m => {
 
                     const cantidad = [
-                        m.llenos > 0 ? `Llenos: ${m.llenos}` : '',
-                        m.vacios > 0 ? `Vacíos: ${m.vacios}` : ''
+                        Number(m.llenos) > 0
+                            ? `Llenos: ${m.llenos}`
+                            : '',
+                        Number(m.vacios) > 0
+                            ? `Vacíos: ${m.vacios}`
+                            : ''
+                    ]
+                        .filter(Boolean)
+                        .join(' | ');
+
+                    const fechaTexto = m.fecha_hora
+                        ? new Date(m.fecha_hora).toLocaleString('es-EC', {
+                            timeZone: 'America/Guayaquil'
+                        })
+                        : m.fecha || '';
+
+                    const idCliente =
+                        m.cliente || m.id_cliente || '';
+
+                    const nombreCliente = idCliente
+                        ? nombresClientes[idCliente] || 'Cliente'
+                        : '';
+
+                    const detalle = [
+                        nombreCliente
+                            ? '👤 ' + nombreCliente
+                            : '',
+                        m.tipo === 'REGRESO DE PLANTA'
+                            ? '🏭 PLANTA'
+                            : m.camion_origen
+                                ? '🚚 ' + m.camion_origen
+                                : '',
+                        m.camion_destino
+                            ? '→ ' + m.camion_destino
+                            : '',
+                        cantidad
                     ]
                         .filter(Boolean)
                         .join(' | ');
 
                     return `
+                        <div class="list-item">
 
-                                        <div class="list-item">
+                            <div class="list-item-top">
 
-                                            <div class="list-item-top">
+                                <span class="list-item-title">
+                                    ${escaparHTML(m.tipo || 'Movimiento')}
+                                </span>
 
-                                                <span class="list-item-title">
-                                                    ${m.tipo}
-                                                </span>
+                                <span class="badge badge-warning">
+                                    ${escaparHTML(m.sync_estado || '')}
+                                </span>
 
-                                                <span class="badge badge-warning">
-                                                    ${m.sync_estado}
-                                                </span>
+                            </div>
 
-                                            </div>
+                            <div class="list-item-sub">
+                                ${escaparHTML(fechaTexto)}
+                            </div>
 
-
-                                            <div class="list-item-sub">
-
-                                                ${new Date(
-                        m.fecha_hora
-                    ).toLocaleString('es-EC')}
-
-                                            </div>
-
-
-                                            <div class="list-item-sub">
-
-                                                ${m.id_cliente
-                            ? '👤 Cliente'
-                            : ''
-                        }
-
-${m.tipo === 'REGRESO DE PLANTA'
-                            ? '🏭 PLANTA'
-                            : m.camion_origen
-                                ? '🚚 ' + m.camion_origen
-                                : ''
-                        }
-
-${m.camion_destino
-                            ? ' → ' + m.camion_destino
-                            : ''
-                        }
-
-${cantidad
-                            ? ' | ' + cantidad
-                            : ''
-                        }
-
-                                            </div>
-
-                                        </div>
-
-                                    `;
-                })
-                .join('')}
+                            <div class="list-item-sub">
+                                ${escaparHTML(detalle)}
+                            </div>
 
                         </div>
-                      `
-        }
+                    `;
+                }).join('')}
 
             </div>
+        `;
+    }
 
-        </main>
+    fechaInicio.addEventListener('change', mostrarMovimientos);
+    fechaFin.addEventListener('change', mostrarMovimientos);
+    filtroCliente.addEventListener('change', mostrarMovimientos);
 
-
-        ${renderNav('movimientos')}
-    `;
-
+    // Al abrir, muestra todos los movimientos de hoy.
+    mostrarMovimientos();
 
     document
         .getElementById('btnNuevo')
-        .addEventListener(
-            'click',
-            mostrarTiposMovimiento
-        );
-
+        .addEventListener('click', mostrarTiposMovimiento);
 
     registrarNavegacion();
 }
-
-
 /* =====================================================
    SELECCIÓN DE MOVIMIENTO
 ===================================================== */
@@ -1204,7 +1355,6 @@ async function formularioEntrega() {
                     new FormData(event.target);
 
                 try {
-
                     await entregaCliente({
 
                         idCliente:
@@ -1213,7 +1363,7 @@ async function formularioEntrega() {
                         camion:
                             form.get('camion'),
 
-                        llenos:
+                        cantidad:
                             form.get('llenos'),
 
                         observacion:
@@ -1760,12 +1910,13 @@ async function formularioSalidaPlanta() {
 
                 try {
 
+
                     await salidaPlanta({
 
                         camion:
                             form.get('camion'),
 
-                        vacios:
+                        cantidad:
                             form.get('vacios'),
 
                         observacion:
@@ -2096,22 +2247,21 @@ async function formularioTraslado() {
 
                 try {
 
+
+                    const tipoCilindro = form.get('tipoCilindro');
+                    const cantidad = Number(form.get('cantidad'));
+
                     await trasladoCamiones({
 
-                        origen:
-                            form.get('origen'),
+                        origen: form.get('origen'),
 
-                        destino:
-                            form.get('destino'),
+                        destino: form.get('destino'),
 
-                        tipoCilindro:
-                            form.get('tipoCilindro'),
+                        llenos: tipoCilindro === 'LLENOS' ? cantidad : 0,
 
-                        cantidad:
-                            form.get('cantidad'),
+                        vacios: tipoCilindro === 'VACIOS' ? cantidad : 0,
 
-                        observacion:
-                            form.get('observacion')
+                        observacion: form.get('observacion')
 
                     });
 
@@ -2677,7 +2827,8 @@ function formularioCliente() {
 
 
                     mostrarExito(
-                        'CLIENTE REGISTRADO'
+                        'CLIENTE REGISTRADO',
+                        'clientes'
                     );
 
                 } catch (error) {
@@ -2940,37 +3091,29 @@ function conectarCancelar() {
    RESULTADOS
 ===================================================== */
 
-function mostrarExito(mensaje) {
+
+function mostrarExito(mensaje, paginaDestino = 'inicio') {
 
     app.innerHTML = `
-
         <main
             class="main-content"
             style="padding-top:50px;"
         >
-
             <div class="card">
-
-                <div
-                    style="
-                        text-align:center;
-                        font-size:55px;
-                        margin-bottom:15px;
-                    "
-                >
+                <div style="
+                    text-align:center;
+                    font-size:55px;
+                    margin-bottom:15px;
+                ">
                     ✓
                 </div>
 
-
-                <h2
-                    style="
-                        text-align:center;
-                        margin-bottom:10px;
-                    "
-                >
+                <h2 style="
+                    text-align:center;
+                    margin-bottom:10px;
+                ">
                     ${mensaje}
                 </h2>
-
 
                 <div
                     class="status-bar status-warning"
@@ -2982,7 +3125,6 @@ function mostrarExito(mensaje) {
                     ⏳ Pendiente de sincronización
                 </div>
 
-
                 <button
                     class="primary-button"
                     id="btnContinuar"
@@ -2990,27 +3132,23 @@ function mostrarExito(mensaje) {
                 >
                     CONTINUAR
                 </button>
-
             </div>
-
         </main>
     `;
 
-
     document
         .getElementById('btnContinuar')
-        .addEventListener(
-            'click',
-            () => {
+        .addEventListener('click', async () => {
 
-                paginaActual =
-                    'inicio';
-
-                render();
+            if (paginaDestino === 'clientes') {
+                await renderClientes();
+                return;
             }
-        );
-}
 
+            paginaActual = paginaDestino;
+            render();
+        });
+}
 
 function mostrarError(mensaje) {
 
@@ -3338,156 +3476,284 @@ async function mostrarApertura() {
    REPORTES
 ===================================================== */
 
-async function renderReportes() {
-    const vendidos = await vendidosHoy();
-    const clientes = await vendidosPorCliente();
-    const listaClientes = await obtenerTodos('clientes');
+function fechaActualReporte() {
+    const fecha = new Date();
+    const anio = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    const dia = String(fecha.getDate()).padStart(2, '0');
 
-    const nombresClientes = Object.fromEntries(
-        listaClientes.map(cliente => [
-            cliente.id_cliente,
-            cliente.nombre
-        ])
-    );
+    return `${anio}-${mes}-${dia}`;
+}
+
+async function copiarTextoReporte(texto) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(texto);
+        } else {
+            const area = document.createElement('textarea');
+            area.value = texto;
+            area.style.position = 'fixed';
+            area.style.opacity = '0';
+            document.body.appendChild(area);
+            area.select();
+
+            const copiado = document.execCommand('copy');
+            area.remove();
+
+            if (!copiado) {
+                throw new Error('No se pudo copiar automáticamente.');
+            }
+        }
+
+        alert('Reporte copiado. Ya puedes pegarlo en WhatsApp.');
+    } catch (error) {
+        console.error(error);
+        alert('No se pudo copiar automáticamente. Selecciona y copia el texto del reporte.');
+    }
+}
+
+async function compartirTextoReporte(texto) {
+    try {
+        if (navigator.share) {
+            await navigator.share({
+                title: 'Reporte de la distribuidora',
+                text: texto
+            });
+        } else {
+            window.open(
+                `https://wa.me/?text=${encodeURIComponent(texto)}`,
+                '_blank'
+            );
+        }
+    } catch (error) {
+        if (error.name !== 'AbortError') {
+            console.error(error);
+            alert('No se pudo abrir la opción para compartir el reporte.');
+        }
+    }
+}
+
+
+async function renderReportes() {
+    const hoy = fechaActualReporte();
+    const inicioSemana = new Date();
+    inicioSemana.setDate(inicioSemana.getDate() - 6);
+
+    const inicioPorDefecto = [
+        inicioSemana.getFullYear(),
+        String(inicioSemana.getMonth() + 1).padStart(2, '0'),
+        String(inicioSemana.getDate()).padStart(2, '0')
+    ].join('-');
 
     const app = document.getElementById('app');
 
     app.innerHTML = `
         <div class="page">
-
             <header class="page-header">
                 <h1>📊 Reportes</h1>
-                <p>Control de cilindros vendidos</p>
             </header>
 
             <section class="card">
-                <h2>VENDIDOS HOY</h2>
+                <h2>📅 REPORTE DIARIO</h2>
 
-                <div class="report-number">
-                    ${vendidos}
-                </div>
-
-                <p>cilindros entregados</p>
-            </section>
-
-            <section class="card">
-                <h2>VENDIDOS POR FECHA</h2>
-
+                <label for="fechaReporte">Fecha del reporte</label>
                 <input
                     type="date"
                     id="fechaReporte"
+                    value="${hoy}"
                 >
 
                 <button
+                    type="button"
                     class="primary-button"
-                    id="btnFechaReporte"
+                    id="btnGenerarDiario"
                 >
-                    Consultar
+                    GENERAR REPORTE DIARIO
                 </button>
 
-                <div id="resultadoFecha"></div>
+                <div id="resultadoDiario"></div>
             </section>
 
             <section class="card">
-                <h2>VENDIDOS POR RANGO</h2>
+                <h2>📆 REPORTE POR RANGO</h2>
+                <p>Consulta las ventas de una semana o cualquier período.</p>
 
-                <label>Desde</label>
-
+                <label for="fechaInicio">Desde</label>
                 <input
                     type="date"
                     id="fechaInicio"
+                    value="${inicioPorDefecto}"
                 >
 
-                <label>Hasta</label>
-
+                <label for="fechaFin">Hasta</label>
                 <input
                     type="date"
                     id="fechaFin"
+                    value="${hoy}"
                 >
 
                 <button
+                    type="button"
                     class="primary-button"
-                    id="btnRangoReporte"
+                    id="btnGenerarRango"
                 >
-                    Consultar rango
+                    GENERAR REPORTE POR RANGO
                 </button>
 
                 <div id="resultadoRango"></div>
             </section>
 
-            <section class="card">
-
-                <h2>VENDIDOS POR CLIENTE</h2>
-
-                ${Object.keys(clientes).length === 0
-            ? '<p>No hay ventas registradas.</p>'
-            : `
-                            <div class="report-list">
-
-                                ${Object.entries(clientes)
-                .sort((a, b) => b[1] - a[1])
-                .map(([idCliente, cantidad]) => `
-                                            <div class="report-row">
-
-                                                <span>
-                                                    ${nombresClientes[idCliente]
-                    || idCliente
-                    }
-                                                </span>
-
-                                                <strong>
-                                                    ${cantidad}
-                                                </strong>
-
-                                            </div>
-                                        `)
-                .join('')
-            }
-
-                            </div>
-                        `
-        }
-
-            </section>
-
             ${renderNav('reportes')}
-
         </div>
     `;
 
-    document
-        .getElementById('btnFechaReporte')
-        .addEventListener('click', async () => {
+    function mostrarTextoReporte(contenedorId, texto, prefijo) {
+        const contenedor = document.getElementById(contenedorId);
 
-            const fecha =
-                document.getElementById('fechaReporte').value;
+        contenedor.innerHTML = `
+            <div class="report-result">
+                <h3>Resultado del reporte</h3>
+
+                <pre id="${prefijo}Texto" style="
+                    white-space: pre-wrap;
+                    overflow-wrap: anywhere;
+                    font-family: inherit;
+                "></pre>
+
+                <button
+                    type="button"
+                    class="primary-button"
+                    id="${prefijo}Compartir"
+                >
+                    📲 COMPARTIR
+                </button>
+
+                <button
+                    type="button"
+                    class="secondary-button"
+                    id="${prefijo}Copiar"
+                >
+                    📋 COPIAR TEXTO
+                </button>
+            </div>
+        `;
+
+        document.getElementById(`${prefijo}Texto`).textContent = texto;
+
+        document
+            .getElementById(`${prefijo}Compartir`)
+            .addEventListener('click', () => compartirTextoReporte(texto));
+
+        document
+            .getElementById(`${prefijo}Copiar`)
+            .addEventListener('click', () => copiarTextoReporte(texto));
+    }
+
+    document
+        .getElementById('btnGenerarDiario')
+        .addEventListener('click', async () => {
+            const boton = document.getElementById('btnGenerarDiario');
+            const fecha = document.getElementById('fechaReporte').value;
 
             if (!fecha) {
-                alert('Selecciona una fecha.');
+                alert('Selecciona la fecha del reporte.');
                 return;
             }
 
-            const cantidad =
-                await vendidosPorFecha(fecha);
+            boton.disabled = true;
+            boton.textContent = 'GENERANDO...';
 
-            document.getElementById(
-                'resultadoFecha'
-            ).innerHTML = `
-                <div class="report-result">
-                    ${cantidad} cilindros vendidos
-                </div>
-            `;
+            try {
+
+                const [
+                    vendidos,
+                    inventario,
+                    clientes,
+                    ventasClientes,
+                    ventasDetalle,
+                    viajesPlanta
+                ] = await Promise.all([
+                    vendidosPorFecha(fecha),
+                    obtenerInventarioReporte(),
+                    obtenerTodos('clientes'),
+                    vendidosPorClienteRango(fecha, fecha),
+                    obtenerVentasDetallePorFecha(fecha),
+                    obtenerViajesPlantaPorRango(fecha, fecha)
+                ]);
+
+                const pendientesOrdenados = clientes
+                    .map(cliente => ({
+                        nombre: cliente.nombre || 'Cliente sin nombre',
+                        cantidad: Number(cliente.pendientes_actuales) || 0
+                    }))
+                    .filter(cliente => cliente.cantidad > 0)
+                    .sort((a, b) => b.cantidad - a.cantidad);
+
+                const fechaTexto = fecha.split('-').reverse().join('/');
+
+                const texto =
+                    `📊 REPORTE DIARIO
+Distribuidora de cilindros
+Fecha: ${fechaTexto}
+
+VENTAS DEL DÍA
+Cilindros vendidos: ${vendidos}
+
+INVENTARIO ACTUAL
+Camión Rojo 
+Llenos: ${inventario.rojoLlenos}
+Vacíos: ${inventario.rojoVacios}
+
+Camión Blanco
+Llenos: ${inventario.blancoLlenos}
+Vacíos: ${inventario.blancoVacios}
+
+Pendientes en clientes: ${inventario.pendientesClientes}
+TOTAL GENERAL DE CILINDROS: ${inventario.total}
+
+VENTAS DEL DÍA POR HORA
+${ventasDetalle.length
+    ? ventasDetalle.map((venta, i) =>
+        `${i + 1}. ${venta.hora} — ${venta.cliente}: ${venta.cantidad} cilindros`
+    ).join('\n')
+    : 'No hay ventas registradas para esta fecha.'}
+
+VIAJES A PLANTA
+${viajesPlanta.length
+    ? `${viajesPlanta.length} ${viajesPlanta.length === 1 ? 'viaje' : 'viajes'} — ${viajesPlanta.reduce((total, viaje) => total + viaje.cantidad, 0)} cilindros enviados
+${viajesPlanta.map((viaje, i) =>
+    `${i + 1}. ${viaje.camion} — ${viaje.cantidad} cilindros — ${viaje.hora}`
+).join('\n')}`
+    : 'No hubo viajes a planta en esta fecha.'}
+
+Todos Los Clientes con Cilindros pendientes:
+${pendientesOrdenados.length
+                        ? pendientesOrdenados.map((cliente, i) =>
+                            `${i + 1}. ${cliente.nombre}: ${cliente.cantidad}`
+                        ).join('\n')
+                        : 'No hay pendientes asignados a clientes.'}
+
+    
+Sin asignar (Nuevos cilindros)
+Llenos: ${inventario.sinAsignarLlenos}
+Vacíos: ${inventario.sinAsignarVacios}`;
+
+                mostrarTextoReporte('resultadoDiario', texto, 'diario');
+            } catch (error) {
+                console.error(error);
+                alert('No se pudo generar el reporte diario. Revisa la consola para ver el error.');
+            } finally {
+                boton.disabled = false;
+                boton.textContent = 'GENERAR REPORTE DIARIO';
+            }
         });
 
     document
-        .getElementById('btnRangoReporte')
+        .getElementById('btnGenerarRango')
         .addEventListener('click', async () => {
-
-            const inicio =
-                document.getElementById('fechaInicio').value;
-
-            const fin =
-                document.getElementById('fechaFin').value;
+            const boton = document.getElementById('btnGenerarRango');
+            const inicio = document.getElementById('fechaInicio').value;
+            const fin = document.getElementById('fechaFin').value;
 
             if (!inicio || !fin) {
                 alert('Selecciona las dos fechas.');
@@ -3495,26 +3761,61 @@ async function renderReportes() {
             }
 
             if (inicio > fin) {
-                alert(
-                    'La fecha inicial no puede ser mayor que la final.'
-                );
+                alert('La fecha inicial no puede ser mayor que la final.');
                 return;
             }
 
-            const cantidad =
-                await vendidosPorRango(inicio, fin);
+            boton.disabled = true;
+            boton.textContent = 'GENERANDO...';
 
-            document.getElementById(
-                'resultadoRango'
-            ).innerHTML = `
-                <div class="report-result">
-                    ${cantidad} cilindros vendidos
-                </div>
-            `;
+            try {
+        
+const [total, clientes, viajesPlanta] = await Promise.all([
+    vendidosPorRango(inicio, fin),
+    vendidosPorClienteRango(inicio, fin),
+    obtenerViajesPlantaPorRango(inicio, fin)
+]);
+
+                const fechaInicioTexto = inicio.split('-').reverse().join('/');
+                const fechaFinTexto = fin.split('-').reverse().join('/');
+
+                const texto =
+                    `📊 REPORTE DE VENTAS POR RANGO
+Distribuidora de cilindros
+Desde: ${fechaInicioTexto}
+Hasta: ${fechaFinTexto}
+
+VIAJES A PLANTA
+${viajesPlanta.length
+    ? `${viajesPlanta.length} ${viajesPlanta.length === 1 ? 'viaje' : 'viajes'} — ${viajesPlanta.reduce((total, viaje) => total + viaje.cantidad, 0)} cilindros enviados
+${viajesPlanta.map((viaje, i) =>
+    `${i + 1}. ${viaje.fecha.split('-').reverse().join('/')} — ${viaje.camion} — ${viaje.cantidad} cilindros — ${viaje.hora}`
+).join('\n')}`
+    : 'No hubo viajes a planta en este período.'}
+
+
+TOTAL DE CILINDROS VENDIDOS: ${total}
+
+VENTAS POR CLIENTE
+${clientes.length
+                        ? clientes.map((cliente, i) =>
+                            `${i + 1}. ${cliente.nombre}: ${cliente.cantidad} cilindros`
+                        ).join('\n')
+                        : 'No hay ventas registradas en este período.'}`;
+
+                mostrarTextoReporte('resultadoRango', texto, 'rango');
+            } catch (error) {
+                console.error(error);
+                alert('No se pudo generar el reporte por rango. Revisa la consola para ver el error.');
+            } finally {
+                boton.disabled = false;
+                boton.textContent = 'GENERAR REPORTE POR RANGO';
+            }
         });
 
     registrarNavegacion();
-} document
+}
+document
     .getElementById('btnExportarBD')
     ?.addEventListener('click', async () => {
 
@@ -3536,8 +3837,8 @@ async function renderReportes() {
             );
         }
     });
-    /* =====================================================
-   INVENTARIO - ADMINISTRACIÓN
+/* =====================================================
+INVENTARIO - ADMINISTRACIÓN
 ===================================================== */
 
 async function renderInventario() {
