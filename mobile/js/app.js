@@ -140,7 +140,9 @@ async function renderInicio() {
     const vaciosDisponibles =
         (inventario.rojo?.vacios || 0) +
         (inventario.blanco?.vacios || 0);
-
+const llenosDisponibles = 
+(inventario.rojo?.llenos || 0 ) +
+(inventario.blanco?.llenos || 0 );
 
     const estadoSync =
         sync.total === 0
@@ -231,12 +233,14 @@ async function renderInicio() {
                         <strong class="number">
                             ${vaciosDisponibles}
                         </strong>
-
+            <span class="label">
+                            LLENOS DISPONIBLES
+                        </span>
+                        <strong class="number">
+                            ${llenosDisponibles}
+                        </strong>
                     </div>
-
-
                 </div>
-
             </section>
 
 
@@ -253,11 +257,6 @@ async function renderInicio() {
                         <div class="card-title">
                             📦 Inventario actual
                         </div>
-
-                        <div class="section-subtitle">
-                            Cilindros actualmente registrados
-                        </div>
-
                     </div>
 
                 </div>
@@ -857,19 +856,19 @@ async function renderMovimientos() {
                         <option value="">Todos</option>
 
                         ${clientes
-                            .slice()
-                            .sort((a, b) =>
-                                (a.nombre || '').localeCompare(
-                                    b.nombre || '',
-                                    'es'
-                                )
-                            )
-                            .map(c => `
+            .slice()
+            .sort((a, b) =>
+                (a.nombre || '').localeCompare(
+                    b.nombre || '',
+                    'es'
+                )
+            )
+            .map(c => `
                                 <option value="${escaparHTML(c.id_cliente)}">
                                     ${escaparHTML(c.nombre)}
                                 </option>
                             `)
-                            .join('')}
+            .join('')}
                     </select>
                 </div>
 
@@ -969,48 +968,48 @@ async function renderMovimientos() {
 
                 ${filtrados.map(m => {
 
-                    const cantidad = [
-                        Number(m.llenos) > 0
-                            ? `Llenos: ${m.llenos}`
-                            : '',
-                        Number(m.vacios) > 0
-                            ? `Vacíos: ${m.vacios}`
-                            : ''
-                    ]
-                        .filter(Boolean)
-                        .join(' | ');
+            const cantidad = [
+                Number(m.llenos) > 0
+                    ? `Llenos: ${m.llenos}`
+                    : '',
+                Number(m.vacios) > 0
+                    ? `Vacíos: ${m.vacios}`
+                    : ''
+            ]
+                .filter(Boolean)
+                .join(' | ');
 
-                    const fechaTexto = m.fecha_hora
-                        ? new Date(m.fecha_hora).toLocaleString('es-EC', {
-                            timeZone: 'America/Guayaquil'
-                        })
-                        : m.fecha || '';
+            const fechaTexto = m.fecha_hora
+                ? new Date(m.fecha_hora).toLocaleString('es-EC', {
+                    timeZone: 'America/Guayaquil'
+                })
+                : m.fecha || '';
 
-                    const idCliente =
-                        m.cliente || m.id_cliente || '';
+            const idCliente =
+                m.cliente || m.id_cliente || '';
 
-                    const nombreCliente = idCliente
-                        ? nombresClientes[idCliente] || 'Cliente'
-                        : '';
+            const nombreCliente = idCliente
+                ? nombresClientes[idCliente] || 'Cliente'
+                : '';
 
-                    const detalle = [
-                        nombreCliente
-                            ? '👤 ' + nombreCliente
-                            : '',
-                        m.tipo === 'REGRESO DE PLANTA'
-                            ? '🏭 PLANTA'
-                            : m.camion_origen
-                                ? '🚚 ' + m.camion_origen
-                                : '',
-                        m.camion_destino
-                            ? '→ ' + m.camion_destino
-                            : '',
-                        cantidad
-                    ]
-                        .filter(Boolean)
-                        .join(' | ');
+            const detalle = [
+                nombreCliente
+                    ? '👤 ' + nombreCliente
+                    : '',
+                m.tipo === 'REGRESO DE PLANTA'
+                    ? '🏭 PLANTA'
+                    : m.camion_origen
+                        ? '🚚 ' + m.camion_origen
+                        : '',
+                m.camion_destino
+                    ? '→ ' + m.camion_destino
+                    : '',
+                cantidad
+            ]
+                .filter(Boolean)
+                .join(' | ');
 
-                    return `
+            return `
                         <div class="list-item">
 
                             <div class="list-item-top">
@@ -1035,7 +1034,7 @@ async function renderMovimientos() {
 
                         </div>
                     `;
-                }).join('')}
+        }).join('')}
 
             </div>
         `;
@@ -3696,44 +3695,39 @@ async function renderReportes() {
 Distribuidora de cilindros
 Fecha: ${fechaTexto}
 
-VENTAS DEL DÍA
-Cilindros vendidos: ${vendidos}
+*VENTAS DEL DÍA: ${vendidos}*
 
 INVENTARIO ACTUAL
-Camión Rojo 
-Llenos: ${inventario.rojoLlenos}
-Vacíos: ${inventario.rojoVacios}
+Camión Rojo: ${inventario.rojoLlenos} Llenos, ${inventario.rojoVacios} Vacíos
+Camión Blanco: ${inventario.blancoLlenos} Llenos, ${inventario.blancoVacios} Vacíos 
 
-Camión Blanco
-Llenos: ${inventario.blancoLlenos}
-Vacíos: ${inventario.blancoVacios}
+*Total: ${inventario.rojoLlenos + inventario.blancoLlenos} Llenos, ${inventario.rojoVacios + inventario.blancoVacios} Vacíos*
 
-Pendientes en clientes: ${inventario.pendientesClientes}
-TOTAL GENERAL DE CILINDROS: ${inventario.total}
-
-VENTAS DEL DÍA POR HORA
+VENTAS DEL DÍA
 ${ventasDetalle.length
-    ? ventasDetalle.map((venta, i) =>
-        `${i + 1}. ${venta.hora} — ${venta.cliente}: ${venta.cantidad} cilindros`
-    ).join('\n')
-    : 'No hay ventas registradas para esta fecha.'}
+                        ? ventasDetalle.map((venta, i) =>
+                            `${i + 1}. ${venta.hora} — ${venta.cliente}: ${venta.cantidad} cilindros`
+                        ).join('\n')
+                        : 'No hay ventas registradas para esta fecha.'}
 
 VIAJES A PLANTA
 ${viajesPlanta.length
-    ? `${viajesPlanta.length} ${viajesPlanta.length === 1 ? 'viaje' : 'viajes'} — ${viajesPlanta.reduce((total, viaje) => total + viaje.cantidad, 0)} cilindros enviados
+                        ? `${viajesPlanta.length} ${viajesPlanta.length === 1 ? 'viaje' : 'viajes'} — ${viajesPlanta.reduce((total, viaje) => total + viaje.cantidad, 0)} cilindros enviados
 ${viajesPlanta.map((viaje, i) =>
-    `${i + 1}. ${viaje.camion} — ${viaje.cantidad} cilindros — ${viaje.hora}`
-).join('\n')}`
-    : 'No hubo viajes a planta en esta fecha.'}
+                            `${i + 1}. ${viaje.camion} — ${viaje.cantidad} cilindros — ${viaje.hora}`
+                        ).join('\n')}`
+                        : 'No hubo viajes a planta en esta fecha.'}
 
-Todos Los Clientes con Cilindros pendientes:
+Clientes con Cilindros pendientes:
 ${pendientesOrdenados.length
                         ? pendientesOrdenados.map((cliente, i) =>
                             `${i + 1}. ${cliente.nombre}: ${cliente.cantidad}`
                         ).join('\n')
                         : 'No hay pendientes asignados a clientes.'}
 
-    
+Pendientes en clientes: ${inventario.pendientesClientes}
+TOTAL GENERAL DE CILINDROS: ${inventario.total}
+
 Sin asignar (Nuevos cilindros)
 Llenos: ${inventario.sinAsignarLlenos}
 Vacíos: ${inventario.sinAsignarVacios}`;
@@ -3769,12 +3763,12 @@ Vacíos: ${inventario.sinAsignarVacios}`;
             boton.textContent = 'GENERANDO...';
 
             try {
-        
-const [total, clientes, viajesPlanta] = await Promise.all([
-    vendidosPorRango(inicio, fin),
-    vendidosPorClienteRango(inicio, fin),
-    obtenerViajesPlantaPorRango(inicio, fin)
-]);
+
+                const [total, clientes, viajesPlanta] = await Promise.all([
+                    vendidosPorRango(inicio, fin),
+                    vendidosPorClienteRango(inicio, fin),
+                    obtenerViajesPlantaPorRango(inicio, fin)
+                ]);
 
                 const fechaInicioTexto = inicio.split('-').reverse().join('/');
                 const fechaFinTexto = fin.split('-').reverse().join('/');
@@ -3787,11 +3781,11 @@ Hasta: ${fechaFinTexto}
 
 VIAJES A PLANTA
 ${viajesPlanta.length
-    ? `${viajesPlanta.length} ${viajesPlanta.length === 1 ? 'viaje' : 'viajes'} — ${viajesPlanta.reduce((total, viaje) => total + viaje.cantidad, 0)} cilindros enviados
+                        ? `${viajesPlanta.length} ${viajesPlanta.length === 1 ? 'viaje' : 'viajes'} — ${viajesPlanta.reduce((total, viaje) => total + viaje.cantidad, 0)} cilindros enviados
 ${viajesPlanta.map((viaje, i) =>
-    `${i + 1}. ${viaje.fecha.split('-').reverse().join('/')} — ${viaje.camion} — ${viaje.cantidad} cilindros — ${viaje.hora}`
-).join('\n')}`
-    : 'No hubo viajes a planta en este período.'}
+                            `${i + 1}. ${viaje.fecha.split('-').reverse().join('/')} — ${viaje.camion} — ${viaje.cantidad} cilindros — ${viaje.hora}`
+                        ).join('\n')}`
+                        : 'No hubo viajes a planta en este período.'}
 
 
 TOTAL DE CILINDROS VENDIDOS: ${total}

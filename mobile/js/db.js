@@ -1,3 +1,6 @@
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const Respaldo = registerPlugin('Respaldo');
 const DB_NAME = 'distribuidora_mobile';
 const DB_VERSION = 1;
 
@@ -181,84 +184,233 @@ export async function contar(storeName) {
         request.onerror = () => reject(request.error);
     });
 }
-// ================================
-// RESPALDO DE BASE DE DATOS
-// ================================
+
+/* =========================================
+   RESPALDO Y RESTAURACIÓN DE BASE DE DATOS
+========================================= */
+
+function obtenerNombreRespaldo() {
+    const fecha = new Date();
+
+    const año = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    const dia = String(fecha.getDate()).padStart(2, '0');
+    const hora = String(fecha.getHours()).padStart(2, '0');
+    const minuto = String(fecha.getMinutes()).padStart(2, '0');
+    const segundo = String(fecha.getSeconds()).padStart(2, '0');
+
+    return `respaldo_distribuidora_${año}-${mes}-${dia}_${hora}-${minuto}-${segundo}.json`;
+}
+
+
+/* =========================================
+   OBTENER UNA COPIA CONSISTENTE DE TODAS
+   LAS TABLAS DE INDEXEDDB
+========================================= */
+
+async function obtenerDatosCompletos() {
+    const db = await abrirDB();
+
+    const stores = Array.from(db.objectStoreNames);
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(stores, 'readonly');
+
+        const datos = {};
+        let errorLectura = null;
+
+        for (const nombreStore of stores) {
+            const request = transaction
+                .objectStore(nombreStore)
+                .getAll();
+
+            request.onsuccess = () => {
+                datos[nombreStore] = request.result;
+            };
+
+            request.onerror = () => {
+                errorLectura = request.error;
+                transaction.abort();
+            };
+        }
+
+        transaction.oncomplete = () => {
+            resolve({
+                stores,
+                datos
+            });
+        };
+
+        transaction.onabort = () => {
+            reject(
+                errorLectura ||
+                transaction.error ||
+                new Error('No se pudieron leer todos los datos.')
+            );
+        };
+
+        transaction.onerror = () => {
+            reject(
+                transaction.error ||
+                new Error('Error al leer la base de datos.')
+            );
+        };
+    });
+}
+
+
+/* =========================================
+   EXPORTAR BASE DE DATOS
+========================================= */
 
 export async function exportarBaseDatos() {
-    const stores = [
-        'configuracion',
-        'clientes',
-        'inventario',
-        'movimientos',
-        'viajes_planta',
-        'sincronizacion'
-    ];
+
+    const copia = await obtenerDatosCompletos();
 
     const respaldo = {
-        version: 1,
+        formato: 'RESPALDO_DISTRIBUIDORA',
+        version: 2,
         fecha_exportacion: new Date().toISOString(),
         base_datos: DB_NAME,
-        datos: {}
+        stores: copia.stores,
+        datos: copia.datos
     };
 
-    for (const store of stores) {
-        respaldo.datos[store] = await obtenerTodos(store);
+    const contenido = JSON.stringify(respaldo, null, 2);
+    const nombre = obtenerNombreRespaldo();
+
+    // ANDROID / CAPACITOR
+    if (Capacitor.isNativePlatform()) {
+
+        await Respaldo.guardarArchivo({
+            nombre,
+            contenido
+        });
+
+        return nombre;
     }
 
-    const contenido = JSON.stringify(
-        respaldo,
-        null,
-        2
-    );
-
+    // NAVEGADOR
     const blob = new Blob(
         [contenido],
-        {
-            type: 'application/json'
-        }
+        { type: 'application/json;charset=utf-8' }
     );
 
     const url = URL.createObjectURL(blob);
-
-    const fecha = new Date();
-
-    const nombre =
-        `respaldo_distribuidora_${fecha.getFullYear()}-` +
-        `${String(fecha.getMonth() + 1).padStart(2, '0')}-` +
-        `${String(fecha.getDate()).padStart(2, '0')}_` +
-        `${String(fecha.getHours()).padStart(2, '0')}-` +
-        `${String(fecha.getMinutes()).padStart(2, '0')}.json`;
-
     const enlace = document.createElement('a');
 
     enlace.href = url;
     enlace.download = nombre;
 
     document.body.appendChild(enlace);
-
     enlace.click();
-
     enlace.remove();
 
-    URL.revokeObjectURL(url);
+    // No revocar inmediatamente: algunos navegadores
+    // todavía necesitan la URL para completar la descarga.
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+    }, 60000);
 
     return nombre;
 }
 
 
+/* =========================================
+   VALIDAR RESPALDO ANTES DE RESTAURAR
+========================================= */
+
+function validarRespaldo(respaldo, storesActuales) {
+
+    if (!respaldo || typeof respaldo !== 'object') {
+        throw new Error('El respaldo está vacío o no es válido.');
+    }
+
+    if (![1, 2].includes(respaldo.version)) {
+        throw new Error('Versión de respaldo no compatible.');
+    }
+
+    if (respaldo.base_datos !== DB_NAME) {
+        throw new Error(
+            'El respaldo pertenece a otra base de datos.'
+        );
+    }
+
+    if (
+        !respaldo.datos ||
+        typeof respaldo.datos !== 'object' ||
+        Array.isArray(respaldo.datos)
+    ) {
+        throw new Error('La estructura de datos no es válida.');
+    }
+
+    // No restaurar si faltan tablas actuales.
+    for (const nombreStore of storesActuales) {
+
+        if (!Array.isArray(respaldo.datos[nombreStore])) {
+            throw new Error(
+                `El respaldo está incompleto. Falta la tabla: ${nombreStore}`
+            );
+        }
+    }
+
+    // No aceptar tablas desconocidas.
+    for (const nombreStore of Object.keys(respaldo.datos)) {
+
+        if (!storesActuales.includes(nombreStore)) {
+            throw new Error(
+                `El respaldo contiene una tabla desconocida: ${nombreStore}`
+            );
+        }
+    }
+
+    // Si el respaldo declara sus tablas, deben coincidir.
+    if (Array.isArray(respaldo.stores)) {
+
+        const declaradas = [...respaldo.stores].sort();
+        const actuales = [...storesActuales].sort();
+
+        if (JSON.stringify(declaradas) !== JSON.stringify(actuales)) {
+            throw new Error(
+                'La estructura del respaldo no coincide con la aplicación.'
+            );
+        }
+    }
+
+    // Comprobar que todos los registros sean objetos.
+    for (const nombreStore of storesActuales) {
+
+        for (const registro of respaldo.datos[nombreStore]) {
+
+            if (
+                !registro ||
+                typeof registro !== 'object' ||
+                Array.isArray(registro)
+            ) {
+                throw new Error(
+                    `Hay un registro inválido en ${nombreStore}.`
+                );
+            }
+        }
+    }
+}
+
+
+/* =========================================
+   IMPORTAR / RESTAURAR BASE DE DATOS
+========================================= */
+
 export async function importarBaseDatos(archivo) {
+
     if (!archivo) {
         throw new Error('No se seleccionó ningún archivo.');
     }
 
     if (
-        archivo.type !== 'application/json' &&
+        !archivo.name ||
         !archivo.name.toLowerCase().endsWith('.json')
     ) {
-        throw new Error(
-            'El archivo seleccionado no es un respaldo JSON válido.'
-        );
+        throw new Error('Selecciona un archivo JSON.');
     }
 
     const texto = await archivo.text();
@@ -267,32 +419,16 @@ export async function importarBaseDatos(archivo) {
 
     try {
         respaldo = JSON.parse(texto);
-    } catch (error) {
-        throw new Error(
-            'El archivo de respaldo no contiene un JSON válido.'
-        );
+    } catch {
+        throw new Error('El archivo no contiene un JSON válido.');
     }
-
-    if (
-        !respaldo ||
-        !respaldo.datos ||
-        typeof respaldo.datos !== 'object'
-    ) {
-        throw new Error(
-            'El archivo no tiene una estructura de respaldo válida.'
-        );
-    }
-
-    const stores = [
-        'configuracion',
-        'clientes',
-        'inventario',
-        'movimientos',
-        'viajes_planta',
-        'sincronizacion'
-    ];
 
     const db = await abrirDB();
+
+    const stores = Array.from(db.objectStoreNames);
+
+    // Validar todo antes de borrar o modificar datos.
+    validarRespaldo(respaldo, stores);
 
     return new Promise((resolve, reject) => {
 
@@ -301,52 +437,51 @@ export async function importarBaseDatos(archivo) {
             'readwrite'
         );
 
+        let errorRestauracion = null;
+
         transaction.oncomplete = () => {
             resolve(true);
         };
 
         transaction.onerror = () => {
             reject(
-                new Error(
-                    'No se pudo restaurar la base de datos.'
-                )
+                errorRestauracion ||
+                transaction.error ||
+                new Error('Error durante la restauración.')
             );
         };
 
         transaction.onabort = () => {
             reject(
-                new Error(
-                    'La restauración de la base de datos fue cancelada.'
-                )
+                errorRestauracion ||
+                transaction.error ||
+                new Error('La restauración fue cancelada.')
             );
         };
 
         try {
 
-            for (const store of stores) {
+            for (const nombreStore of stores) {
 
                 const objectStore =
-                    transaction.objectStore(store);
+                    transaction.objectStore(nombreStore);
 
                 objectStore.clear();
 
-                const registros =
-                    respaldo.datos[store];
-
-                if (!Array.isArray(registros)) {
-                    continue;
-                }
-
-                for (const registro of registros) {
+                for (const registro of respaldo.datos[nombreStore]) {
                     objectStore.put(registro);
                 }
             }
 
         } catch (error) {
 
-            transaction.abort();
+            errorRestauracion = error;
 
-            reject(error);
+            try {
+                transaction.abort();
+            } catch {
+                reject(error);
+            }
         }
     });
 }
