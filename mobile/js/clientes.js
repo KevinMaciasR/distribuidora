@@ -1,7 +1,8 @@
 import {
     guardar,
     obtener,
-    obtenerTodos
+    obtenerTodos,
+    guardarClienteEInventario
 } from './db.js';
 
 import {
@@ -68,9 +69,15 @@ export async function crearCliente({
 
         observacion,
 
-        pendientes_actuales: 0,
+      pendientes_actuales: 0,
 
-        sync_estado: 'PENDIENTE'
+asignacion_inicial: {
+    realizada: false,
+    cantidad: 0,
+    fecha: null
+},
+
+sync_estado: 'PENDIENTE'
 
     };
 
@@ -184,306 +191,73 @@ export async function calcularPendientesAsignados() {
 }
 
 
-/* =====================================================
-   OBTENER PENDIENTES INICIALES SIN ASIGNAR
-===================================================== */
 
-export async function obtenerPendientesInicialesSinAsignar() {
-
-    const inventario =
-        await obtenerInventario();
-
-
-    const totalClientes =
-        inventario.clientes?.pendientes || 0;
-
-
-    const asignados =
-        await calcularPendientesAsignados();
-
-
-    const disponibles =
-        totalClientes - asignados;
-
-
-    return Math.max(
-        0,
-        disponibles
-    );
-}
-
-
-/* =====================================================
-   ASIGNAR PENDIENTE INICIAL A CLIENTE
-=====================================================
-
-   IMPORTANTE:
-
-   Esta función NO crea un movimiento.
-
-   NO cuenta como venta.
-
-   NO aumenta el inventario.
-
-   Solamente distribuye una cantidad que ya
-   estaba registrada dentro de CLIENTES.pendientes.
-===================================================== */
-
-export async function asignarPendienteInicial(
-    idCliente,
-    cantidad
-) {
+/*=====================================================
+/* ASIGNAR PENDIENTE INICIAL A CLIENTE */
+export async function asignarPendienteInicial(idCliente, cantidad) {
 
     cantidad = Number(cantidad);
 
-
-    if (
-        !Number.isInteger(cantidad) ||
-        cantidad <= 0
-    ) {
-
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
         throw new Error(
             'La cantidad inicial debe ser un número entero mayor que 0.'
         );
-
     }
 
-
-    const cliente =
-        await obtenerCliente(
-            idCliente
-        );
-
+    const cliente = await obtenerCliente(idCliente);
 
     if (!cliente) {
-
-        throw new Error(
-            'El cliente no existe.'
-        );
-
+        throw new Error('El cliente no existe.');
     }
 
-
-    if (
-        cliente.estado !== 'ACTIVO'
-    ) {
-
+    if (cliente.estado !== 'ACTIVO') {
         throw new Error(
             'No puedes asignar pendientes a un cliente inactivo.'
         );
-
     }
 
-
-    const disponibles =
-        await obtenerPendientesInicialesSinAsignar();
-
-
-    if (cantidad > disponibles) {
-
+    if (cliente.asignacion_inicial?.realizada) {
         throw new Error(
-            `No hay suficientes pendientes iniciales sin asignar. Disponibles: ${disponibles}.`
+            'Este cliente ya tiene una asignación inicial registrada.'
         );
-
     }
 
+    if ((cliente.pendientes_actuales || 0) > 0) {
+        throw new Error(
+            'Este cliente ya tiene pendientes registrados. Verifica su saldo antes de realizar una asignación inicial.'
+        );
+    }
 
-    cliente.pendientes_actuales =
-        (cliente.pendientes_actuales || 0) +
-        cantidad;
+    const inventario = await obtenerInventario();
 
+    const clientesActual = inventario.clientes;
 
-    cliente.sync_estado =
-        'PENDIENTE';
+    const nuevoPendiente =
+        (clientesActual.pendientes || 0) + cantidad;
 
+    cliente.pendientes_actuales = cantidad;
 
-    await guardar(
-        'clientes',
-        cliente
+    cliente.asignacion_inicial = {
+        realizada: true,
+        cantidad,
+        fecha: new Date().toISOString()
+    };
+
+    cliente.sync_estado = 'PENDIENTE';
+
+    const nuevoInventario = {
+        ...clientesActual,
+        pendientes: nuevoPendiente
+    };
+
+    await guardarClienteEInventario(
+        cliente,
+        nuevoInventario
     );
-
 
     return cliente;
 }
-
-
-/* =====================================================
-   ASIGNAR VARIOS PENDIENTES INICIALES
-===================================================== */
-
-export async function asignarPendientesIniciales(
-    asignaciones
-) {
-
-    if (!Array.isArray(asignaciones)) {
-
-        throw new Error(
-            'Las asignaciones deben ser un arreglo.'
-        );
-
-    }
-
-
-    const inventario =
-        await obtenerInventario();
-
-
-    const totalClientes =
-        inventario.clientes?.pendientes || 0;
-
-
-    const clientes =
-        await obtenerTodos('clientes');
-
-
-    const activos =
-        clientes.filter(
-            cliente =>
-                cliente.estado === 'ACTIVO'
-        );
-
-
-    const mapa =
-        new Map(
-            activos.map(
-                cliente => [
-                    cliente.id_cliente,
-                    cliente
-                ]
-            )
-        );
-
-
-    let cantidadAsignar = 0;
-
-
-    for (
-        const asignacion
-        of asignaciones
-    ) {
-
-        const cantidad =
-            Number(
-                asignacion.cantidad
-            );
-
-
-        if (
-            !Number.isInteger(cantidad) ||
-            cantidad < 0
-        ) {
-
-            throw new Error(
-                'Las cantidades iniciales deben ser números enteros mayores o iguales a 0.'
-            );
-
-        }
-
-
-        if (cantidad === 0) {
-            continue;
-        }
-
-
-        const cliente =
-            mapa.get(
-                asignacion.idCliente
-            );
-
-
-        if (!cliente) {
-
-            throw new Error(
-                'Uno de los clientes seleccionados no existe o está inactivo.'
-            );
-
-        }
-
-
-        cantidadAsignar +=
-            cantidad;
-
-    }
-
-
-    const yaAsignados =
-        activos.reduce(
-            (total, cliente) =>
-                total +
-                (cliente.pendientes_actuales || 0),
-            0
-        );
-
-
-    const disponibles =
-        totalClientes -
-        yaAsignados;
-
-
-    if (
-        cantidadAsignar >
-        disponibles
-    ) {
-
-        throw new Error(
-            `No hay suficientes pendientes iniciales. Disponibles: ${disponibles}.`
-        );
-
-    }
-
-
-    /*
-       Aplicamos las asignaciones únicamente después
-       de validar que TODAS caben dentro del saldo disponible.
-    */
-
-    for (
-        const asignacion
-        of asignaciones
-    ) {
-
-        const cantidad =
-            Number(
-                asignacion.cantidad
-            );
-
-
-        if (cantidad === 0) {
-            continue;
-        }
-
-
-        const cliente =
-            mapa.get(
-                asignacion.idCliente
-            );
-
-
-        cliente.pendientes_actuales =
-            (cliente.pendientes_actuales || 0) +
-            cantidad;
-
-
-        cliente.sync_estado =
-            'PENDIENTE';
-
-
-        await guardar(
-            'clientes',
-            cliente
-        );
-
-    }
-
-
-    return {
-        asignados: cantidadAsignar,
-        disponibles:
-            disponibles -
-            cantidadAsignar
-    };
-}
-
+  
 
 /* =====================================================
    MODIFICAR PENDIENTE DEL CLIENTE
@@ -551,10 +325,6 @@ export async function modificarPendienteCliente(
         'PENDIENTE';
 
 
-    await guardar(
-        'clientes',
-        cliente
-    );
 
 
     /*
@@ -565,16 +335,29 @@ export async function modificarPendienteCliente(
        solamente el saldo del cliente que acabamos de modificar.
     */
 
-    const totalPendientes =
-        await calcularPendientesAsignados();
+    const clientes = await obtenerTodos('clientes');
 
+const totalPendientes = clientes
+    .filter(c => c.estado === 'ACTIVO')
+    .reduce((total, c) => {
+        return total + (
+            c.id_cliente === idCliente
+                ? nuevoPendiente
+                : Number(c.pendientes_actuales || 0)
+        );
+    }, 0);
 
-    await actualizarInventario(
-        UBICACIONES.CLIENTES,
-        {
-            pendientes: totalPendientes
-        }
-    );
+const inventario = await obtenerInventario();
+
+const nuevoInventario = {
+    ...inventario.clientes,
+    pendientes: totalPendientes
+};
+
+await guardarClienteEInventario(
+    cliente,
+    nuevoInventario
+);
 
 
     return cliente;

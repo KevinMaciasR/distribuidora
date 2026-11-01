@@ -114,7 +114,44 @@ export async function guardar(storeName, data) {
         transaction.onerror = () => reject(transaction.error);
     });
 }
+/* =========================================
+   ACTUALIZAR CLIENTE E INVENTARIO
+   EN UNA SOLA TRANSACCIÓN
+========================================= */
 
+export async function guardarClienteEInventario(cliente, inventario) {
+
+    const db = await abrirDB();
+
+    return new Promise((resolve, reject) => {
+
+        const transaction = db.transaction(
+            ['clientes', 'inventario'],
+            'readwrite'
+        );
+
+        transaction.objectStore('clientes').put(cliente);
+        transaction.objectStore('inventario').put(inventario);
+
+        transaction.oncomplete = () => {
+            resolve({ cliente, inventario });
+        };
+
+        transaction.onerror = () => {
+            reject(
+                transaction.error ||
+                new Error('No se pudieron guardar los cambios.')
+            );
+        };
+
+        transaction.onabort = () => {
+            reject(
+                transaction.error ||
+                new Error('La operación fue cancelada.')
+            );
+        };
+    });
+}
 
 export async function obtener(storeName, key) {
 
@@ -184,7 +221,120 @@ export async function contar(storeName) {
         request.onerror = () => reject(request.error);
     });
 }
+export async function guardarInventarioYMovimiento(inventario, movimiento) {
 
+    const db = await abrirDB();
+
+    return new Promise((resolve, reject) => {
+
+        const transaction = db.transaction(
+            ['inventario', 'movimientos'],
+            'readwrite'
+        );
+
+        transaction.objectStore('inventario').put(inventario);
+        transaction.objectStore('movimientos').put(movimiento);
+
+        transaction.oncomplete = () => {
+            resolve({ inventario, movimiento });
+        };
+
+        transaction.onerror = () => {
+            reject(
+                transaction.error ||
+                new Error('No se pudo guardar el cambiazo.')
+            );
+        };
+
+        transaction.onabort = () => {
+            reject(
+                transaction.error ||
+                new Error('La operación fue cancelada.')
+            );
+        };
+    });
+}
+
+export async function ejecutarTransaccionAtomica(nombresStores, procesar) {
+    if (!Array.isArray(nombresStores) || nombresStores.length === 0) {
+        throw new Error('Debes indicar al menos un almacén.');
+    }
+
+    if (typeof procesar !== 'function') {
+        throw new Error('La función de procesamiento no es válida.');
+    }
+
+    const db = await abrirDB();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(nombresStores, 'readwrite');
+        const datos = {};
+
+        let pendientes = nombresStores.length;
+        let resultado;
+        let errorControlado = null;
+
+        for (const nombre of nombresStores) {
+            const solicitud = tx.objectStore(nombre).getAll();
+
+            solicitud.onsuccess = () => {
+                datos[nombre] = solicitud.result;
+                pendientes--;
+
+                if (pendientes === 0) {
+                    try {
+                        // Esta función debe ser síncrona.
+                        const plan = procesar(datos);
+
+                        if (!plan || typeof plan !== 'object') {
+                            throw new Error('El plan de cambios no es válido.');
+                        }
+
+                        resultado = plan.resultado;
+
+                        for (const [nombreStore, registros] of Object.entries(plan.puts || {})) {
+                            if (!nombresStores.includes(nombreStore)) {
+                                throw new Error(`Almacén no incluido en la transacción: ${nombreStore}`);
+                            }
+
+                            for (const registro of registros) {
+                                tx.objectStore(nombreStore).put(registro);
+                            }
+                        }
+
+                        for (const [nombreStore, claves] of Object.entries(plan.deletes || {})) {
+                            if (!nombresStores.includes(nombreStore)) {
+                                throw new Error(`Almacén no incluido en la transacción: ${nombreStore}`);
+                            }
+
+                            for (const clave of claves) {
+                                tx.objectStore(nombreStore).delete(clave);
+                            }
+                        }
+                    } catch (error) {
+                        errorControlado = error;
+                        tx.abort();
+                    }
+                }
+            };
+
+            solicitud.onerror = () => {
+                errorControlado = solicitud.error;
+                tx.abort();
+            };
+        }
+
+        tx.oncomplete = () => resolve(resultado);
+
+        tx.onabort = () => {
+            reject(errorControlado || tx.error || new Error('La transacción fue cancelada.'));
+        };
+
+        tx.onerror = () => {
+            reject(errorControlado || tx.error || new Error('Error en la transacción.'));
+        };
+    });
+}
 /* =========================================
    RESPALDO Y RESTAURACIÓN DE BASE DE DATOS
 ========================================= */
@@ -483,5 +633,28 @@ export async function importarBaseDatos(archivo) {
                 reject(error);
             }
         }
+    });
+}
+export async function registrarOperacionInventario(tipo, datos = {}) {
+    const db = await abrirDB();
+
+    const movimiento = {
+        id_movimiento: crypto.randomUUID(),
+        fecha_hora: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        tipo,
+        estado: 'ACTIVO',
+        sync_estado: 'PENDIENTE',
+        dispositivo: 'MOVIL',
+        ...datos
+    };
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('movimientos', 'readwrite');
+        tx.objectStore('movimientos').put(movimiento);
+
+        tx.oncomplete = () => resolve(movimiento);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
     });
 }

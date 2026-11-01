@@ -17,15 +17,16 @@ import {
     regresoPlanta,
     trasladoCamiones,
     obtenerMovimientos,
-    obtenerViajesAbiertos
+    obtenerViajesAbiertos,
+    anularUltimoMovimiento,
+    editarUltimaEntregaCliente,
+    cambiazo
 } from './movimientos.js';
 
 import {
     crearCliente,
     obtenerClientes,
     asignarPendienteInicial,
-    obtenerPendientesInicialesSinAsignar,
-    asignarPendientesIniciales
 } from './clientes.js';
 
 import {
@@ -140,9 +141,9 @@ async function renderInicio() {
     const vaciosDisponibles =
         (inventario.rojo?.vacios || 0) +
         (inventario.blanco?.vacios || 0);
-const llenosDisponibles = 
-(inventario.rojo?.llenos || 0 ) +
-(inventario.blanco?.llenos || 0 );
+    const llenosDisponibles =
+        (inventario.rojo?.llenos || 0) +
+        (inventario.blanco?.llenos || 0);
 
     const estadoSync =
         sync.total === 0
@@ -157,7 +158,39 @@ const llenosDisponibles =
                 </div>
               `;
 
+    const viajesAbiertos = inventario.viajesAbiertos || [];
 
+    const tarjetasViajes = viajesAbiertos.map(viaje => {
+
+        const pendientes =
+            Math.max(
+                0,
+                Number(viaje.vacios_enviados || 0) -
+                Number(viaje.llenos_recibidos || 0)
+            );
+
+        const camion =
+            String(viaje.camion || '').toUpperCase();
+
+        return `
+        <div class="inventory-item trip-item">
+
+            <span class="label">
+                🚚 Viaje en progreso ⏳
+            </span>
+
+            <strong class="number">
+                ${pendientes}   
+            </strong>
+            <span class="label">
+            ${camion}    
+             cilindros
+            </span>
+
+        </div>
+    `;
+
+    }).join('');
     app.innerHTML = `
 
         <!-- =========================================
@@ -276,11 +309,6 @@ const llenosDisponibles =
                         <strong class="number">
                             ${inventario.rojo?.llenos || 0}
                         </strong>
-
-                        <span class="sub">
-                            disponibles
-                        </span>
-
                     </div>
 
 
@@ -296,10 +324,6 @@ const llenosDisponibles =
                             ${inventario.rojo?.vacios || 0}
                         </strong>
 
-                        <span class="sub">
-                            disponibles
-                        </span>
-
                     </div>
 
 
@@ -314,11 +338,6 @@ const llenosDisponibles =
                         <strong class="number">
                             ${inventario.blanco?.llenos || 0}
                         </strong>
-
-                        <span class="sub">
-                            disponibles
-                        </span>
-
                     </div>
 
 
@@ -334,34 +353,26 @@ const llenosDisponibles =
                             ${inventario.blanco?.vacios || 0}
                         </strong>
 
-                        <span class="sub">
-                            disponibles
-                        </span>
-
                     </div>
 
 
                     <!-- CLIENTES -->
 
-                    <div
-                        class="inventory-item"
-                        style="grid-column: span 2;"
-                    >
+<div class="inventory-item">
 
-                        <span class="label">
-                            👥 Clientes
-                        </span>
+    <span class="label">
+        👥 Clientes
+    </span>
 
-                        <strong class="number">
-                            ${inventario.clientes?.pendientes || 0}
-                        </strong>
+    <strong class="number">
+        ${inventario.clientes?.pendientes || 0}
+    </strong>
 
-                        <span class="sub">
-                            cilindros pendientes de recuperación
-                        </span>
+</div>
 
-                    </div>
+<!-- VIAJES ABIERTOS -->
 
+${tarjetasViajes}
 
                 </div>
 
@@ -761,18 +772,16 @@ const llenosDisponibles =
    LISTA DE MOVIMIENTOS
 ===================================================== */
 
-
-
 async function renderMovimientos() {
 
-    const movimientos = await obtenerMovimientos();
+    let movimientos = await obtenerMovimientos();
     const clientes = await obtenerTodos('clientes');
 
     const nombresClientes = Object.fromEntries(
         clientes.map(c => [c.id_cliente, c.nombre])
     );
 
-    const escaparHTML = (valor) =>
+    const escaparHTML = valor =>
         String(valor ?? '').replace(/[&<>"']/g, caracter => ({
             '&': '&amp;',
             '<': '&lt;',
@@ -781,13 +790,23 @@ async function renderMovimientos() {
             "'": '&#39;'
         })[caracter]);
 
-    const obtenerFechaLocal = (fechaHora) => {
+    const obtenerFechaLocal = fechaHora => {
         if (!fechaHora) return '';
 
         return new Date(fechaHora).toLocaleDateString('en-CA', {
             timeZone: 'America/Guayaquil'
         });
     };
+
+    const obtenerUltimoActivo = lista =>
+        lista
+            .filter(m => m.estado === 'ACTIVO')
+            .sort((a, b) =>
+                new Date(b.fecha_hora || b.created_at || 0).getTime() -
+                new Date(a.fecha_hora || a.created_at || 0).getTime()
+            )[0] || null;
+
+    let ultimoActivo = obtenerUltimoActivo(movimientos);
 
     const fechaHoy = new Date().toLocaleDateString('en-CA', {
         timeZone: 'America/Guayaquil'
@@ -815,42 +834,30 @@ async function renderMovimientos() {
                     Buscar movimientos
                 </div>
 
-                <div class="form-group">
-                    <label for="fechaInicioMovimientos">
+                <div class="fechas-horizontales">
 
+                    <div class="form-group">
+                        <label for="fechaInicioMovimientos">Desde</label>
+                        <input
+                            type="date"
+                            id="fechaInicioMovimientos"
+                            value="${fechaHoy}"
+                        >
+                    </div>
 
-<div class="fechas-horizontales">
+                    <div class="form-group">
+                        <label for="fechaFinMovimientos">Hasta</label>
+                        <input
+                            type="date"
+                            id="fechaFinMovimientos"
+                            value="${fechaHoy}"
+                        >
+                    </div>
 
-    <div class="form-group">
-        <label for="fechaInicioMovimientos">
-            Desde
-        </label>
-
-        <input
-            type="date"
-            id="fechaInicioMovimientos"
-            value="${fechaHoy}"
-        >
-    </div>
-
-    <div class="form-group">
-        <label for="fechaFinMovimientos">
-            Hasta
-        </label>
-
-        <input
-            type="date"
-            id="fechaFinMovimientos"
-            value="${fechaHoy}"
-        >
-    </div>
-
-</div>
+                </div>
 
                 <div class="form-group">
-                    <label for="filtroClienteMovimientos">
-                        Cliente
-                    </label>
+                    <label for="filtroClienteMovimientos">Cliente</label>
 
                     <select id="filtroClienteMovimientos">
                         <option value="">Todos</option>
@@ -887,21 +894,11 @@ async function renderMovimientos() {
         ${renderNav('movimientos')}
     `;
 
-    const lista =
-        document.getElementById('listaMovimientos');
-
-    const fechaInicio =
-        document.getElementById('fechaInicioMovimientos');
-
-    const fechaFin =
-        document.getElementById('fechaFinMovimientos');
-
-    const filtroCliente =
-        document.getElementById('filtroClienteMovimientos');
-
-    const contador =
-        document.getElementById('contadorMovimientos');
-
+    const lista = document.getElementById('listaMovimientos');
+    const fechaInicio = document.getElementById('fechaInicioMovimientos');
+    const fechaFin = document.getElementById('fechaFinMovimientos');
+    const filtroCliente = document.getElementById('filtroClienteMovimientos');
+    const contador = document.getElementById('contadorMovimientos');
 
     function mostrarMovimientos() {
 
@@ -923,8 +920,7 @@ async function renderMovimientos() {
             contador.textContent = '';
             lista.innerHTML = `
                 <div class="empty-state">
-                    La fecha de inicio no puede ser posterior
-                    a la fecha de fin.
+                    La fecha de inicio no puede ser posterior a la fecha de fin.
                 </div>
             `;
             return;
@@ -936,18 +932,16 @@ async function renderMovimientos() {
                 ? obtenerFechaLocal(m.fecha_hora)
                 : (m.fecha || '');
 
-            const idCliente =
-                m.cliente || m.id_cliente || '';
+            const idCliente = m.cliente || m.id_cliente || '';
 
-            const coincideFecha =
+            return (
                 fechaMovimiento >= inicio &&
-                fechaMovimiento <= fin;
-
-            const coincideCliente =
-                !clienteSeleccionado ||
-                String(idCliente) === String(clienteSeleccionado);
-
-            return coincideFecha && coincideCliente;
+                fechaMovimiento <= fin &&
+                (
+                    !clienteSeleccionado ||
+                    String(idCliente) === String(clienteSeleccionado)
+                )
+            );
         });
 
         contador.textContent =
@@ -969,15 +963,9 @@ async function renderMovimientos() {
                 ${filtrados.map(m => {
 
             const cantidad = [
-                Number(m.llenos) > 0
-                    ? `Llenos: ${m.llenos}`
-                    : '',
-                Number(m.vacios) > 0
-                    ? `Vacíos: ${m.vacios}`
-                    : ''
-            ]
-                .filter(Boolean)
-                .join(' | ');
+                Number(m.llenos) > 0 ? `Llenos: ${m.llenos}` : '',
+                Number(m.vacios) > 0 ? `Vacíos: ${m.vacios}` : ''
+            ].filter(Boolean).join(' | ');
 
             const fechaTexto = m.fecha_hora
                 ? new Date(m.fecha_hora).toLocaleString('es-EC', {
@@ -985,29 +973,35 @@ async function renderMovimientos() {
                 })
                 : m.fecha || '';
 
-            const idCliente =
-                m.cliente || m.id_cliente || '';
+            const idCliente = m.cliente || m.id_cliente || '';
 
             const nombreCliente = idCliente
                 ? nombresClientes[idCliente] || 'Cliente'
                 : '';
 
             const detalle = [
-                nombreCliente
-                    ? '👤 ' + nombreCliente
-                    : '',
+                nombreCliente ? '👤 ' + nombreCliente : '',
                 m.tipo === 'REGRESO DE PLANTA'
                     ? '🏭 PLANTA'
                     : m.camion_origen
                         ? '🚚 ' + m.camion_origen
                         : '',
-                m.camion_destino
-                    ? '→ ' + m.camion_destino
-                    : '',
+                m.camion_destino ? '→ ' + m.camion_destino : '',
                 cantidad
-            ]
-                .filter(Boolean)
-                .join(' | ');
+            ].filter(Boolean).join(' | ');
+
+            const esUltimoActivo =
+                ultimoActivo &&
+                m.id_movimiento === ultimoActivo.id_movimiento;
+
+            const puedeGestionar =
+                esUltimoActivo &&
+                m.estado === 'ACTIVO' &&
+                m.sync_estado === 'PENDIENTE';
+
+            const puedeEditarEntrega =
+                puedeGestionar &&
+                m.tipo === 'ENTREGA A CLIENTE';
 
             return `
                         <div class="list-item">
@@ -1019,7 +1013,9 @@ async function renderMovimientos() {
                                 </span>
 
                                 <span class="badge badge-warning">
-                                    ${escaparHTML(m.sync_estado || '')}
+                                    ${m.estado === 'ANULADO'
+                    ? 'ANULADO'
+                    : escaparHTML(m.sync_estado || '')}
                                 </span>
 
                             </div>
@@ -1032,19 +1028,113 @@ async function renderMovimientos() {
                                 ${escaparHTML(detalle)}
                             </div>
 
+                            ${m.observacion ? `
+                                <div class="list-item-sub">
+                                    ${escaparHTML(m.observacion)}
+                                </div>
+                            ` : ''}
+
+                            ${puedeGestionar ? `
+                                <div class="acciones-movimiento">
+
+                                    ${puedeEditarEntrega ? `
+                                        <button
+                                            type="button"
+                                            class="btn-accion btn-editar"
+                                            data-editar="${escaparHTML(m.id_movimiento)}"
+                                        >
+                                            ✏️ Editar
+                                        </button>
+                                    ` : ''}
+
+                                    <button
+                                        type="button"
+                                        class="btn-accion btn-anular"
+                                        data-anular="${escaparHTML(m.id_movimiento)}"
+                                    >
+                                        Anular
+                                    </button>
+
+                                </div>
+                            ` : ''}
+
                         </div>
                     `;
         }).join('')}
 
             </div>
         `;
+
+        // EDITAR
+        lista.querySelectorAll('[data-editar]').forEach(boton => {
+
+            boton.addEventListener('click', async () => {
+
+                const movimiento = movimientos.find(
+                    m => m.id_movimiento === boton.dataset.editar
+                );
+
+                if (!movimiento || !ultimoActivo ||
+                    movimiento.id_movimiento !== ultimoActivo.id_movimiento) {
+                    alert('Este movimiento ya no es el último activo.');
+                    return;
+                }
+
+                if (movimiento.sync_estado !== 'PENDIENTE') {
+                    alert('Este movimiento ya fue sincronizado.');
+                    return;
+                }
+
+                await abrirFormularioMovimiento(
+                    movimiento.tipo,
+                    movimiento
+                );
+            });
+        });
+
+        // ANULAR
+        lista.querySelectorAll('[data-anular]').forEach(boton => {
+
+            boton.addEventListener('click', async () => {
+
+                const confirmar = confirm(
+                    '¿Anular este movimiento? Se revertirán sus cantidades y se conservará el registro en el historial.'
+                );
+
+                if (!confirmar) return;
+
+                try {
+
+                    boton.disabled = true;
+                    boton.textContent = 'Anulando...';
+
+                    await anularUltimoMovimiento();
+
+                    movimientos = await obtenerMovimientos();
+                    ultimoActivo = obtenerUltimoActivo(movimientos);
+
+                    alert('Movimiento anulado correctamente.');
+
+                    mostrarMovimientos();
+
+                } catch (error) {
+
+                    alert(
+                        error.message ||
+                        'No se pudo anular el movimiento.'
+                    );
+
+                    boton.disabled = false;
+                    boton.textContent = 'Anular';
+                }
+            });
+        });
     }
 
     fechaInicio.addEventListener('change', mostrarMovimientos);
     fechaFin.addEventListener('change', mostrarMovimientos);
     filtroCliente.addEventListener('change', mostrarMovimientos);
 
-    // Al abrir, muestra todos los movimientos de hoy.
     mostrarMovimientos();
 
     document
@@ -1053,6 +1143,7 @@ async function renderMovimientos() {
 
     registrarNavegacion();
 }
+
 /* =====================================================
    SELECCIÓN DE MOVIMIENTO
 ===================================================== */
@@ -1119,6 +1210,12 @@ function mostrarTiposMovimiento() {
         'TRASLADO ENTRE CAMIONES',
         'Mueve cilindros entre camiones',
         TIPOS_MOVIMIENTO.TRASLADO
+    )}
+    ${botonMovimiento(
+        '🔃',
+        'CAMBIAZO',
+        'Cambia cilindros llenos por vacíos o viceversa',
+        TIPOS_MOVIMIENTO.CAMBIAZO
     )}
 
             </div>
@@ -1200,109 +1297,81 @@ function botonMovimiento(
    FORMULARIOS
 ===================================================== */
 
-async function abrirFormularioMovimiento(tipo) {
+async function abrirFormularioMovimiento(tipo, movimientoEditar = null) {
 
     switch (tipo) {
 
         case TIPOS_MOVIMIENTO.ENTREGA_CLIENTE:
-
-            await formularioEntrega();
-
+            await formularioEntrega(movimientoEditar);
             break;
-
 
         case TIPOS_MOVIMIENTO.RETIRO_CLIENTE:
-
-            await formularioRetiro();
-
+            await formularioRetiro(movimientoEditar);
             break;
-
 
         case TIPOS_MOVIMIENTO.ENTREGA_RETIRO:
-
-            await formularioEntregaRetiro();
-
+            await formularioEntregaRetiro(movimientoEditar);
             break;
-
 
         case TIPOS_MOVIMIENTO.SALIDA_PLANTA:
-
-            await formularioSalidaPlanta();
-
+            await formularioSalidaPlanta(movimientoEditar);
             break;
-
 
         case TIPOS_MOVIMIENTO.REGRESO_PLANTA:
-
-            await formularioRegresoPlanta();
-
+            await formularioRegresoPlanta(movimientoEditar);
             break;
-
 
         case TIPOS_MOVIMIENTO.TRASLADO:
-
-            await formularioTraslado();
-
+            await formularioTraslado(movimientoEditar);
             break;
+
+        case TIPOS_MOVIMIENTO.CAMBIAZO:
+            await formularioCambiazo(movimientoEditar);
+            break;
+
+        default:
+            throw new Error('Tipo de movimiento no reconocido.');
     }
 }
-
-
 /* =====================================================
    ENTREGA A CLIENTE
 ===================================================== */
 
-async function formularioEntrega() {
+async function formularioEntrega(movimientoEditar = null) {
 
-    const clientes =
-        await obtenerClientes();
+    const clientes = await obtenerClientes();
 
+    const modoEdicion = Boolean(movimientoEditar);
 
     app.innerHTML = `
 
         ${cabeceraFormulario(
-        '🚚 ENTREGA A CLIENTE'
+        modoEdicion
+            ? '✏️ EDITAR ENTREGA A CLIENTE'
+            : '🚚 ENTREGA A CLIENTE'
     )}
-
 
         <main class="main-content">
 
             <form id="formMovimiento">
 
-
                 ${selectClientes(clientes)}
 
-
                 <div class="form-group">
-
-                    <label>
-                        Camión
-                    </label>
+                    <label>Camión</label>
 
                     <select
                         class="form-control"
                         name="camion"
                         required
                     >
-
-                        <option value="ROJO">
-                            Camión Rojo
-                        </option>
-
-                        <option value="BLANCO">
-                            Camión Blanco
-                        </option>
-
+                        <option value="ROJO">Camión Rojo</option>
+                        <option value="BLANCO">Camión Blanco</option>
                     </select>
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Cilindros llenos
-                    </label>
+                    <label>Cilindros llenos</label>
 
                     <input
                         class="form-control"
@@ -1312,24 +1381,17 @@ async function formularioEntrega() {
                         step="1"
                         required
                     >
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Observación
-                    </label>
+                    <label>Observación</label>
 
                     <textarea
                         class="form-control"
                         name="observacion"
                         placeholder="Opcional"
                     ></textarea>
-
                 </div>
-
 
                 ${botonesFormulario()}
 
@@ -1338,51 +1400,71 @@ async function formularioEntrega() {
         </main>
     `;
 
+    const formulario = document.getElementById('formMovimiento');
+
+    // Cargar los datos originales cuando se edita.
+    if (modoEdicion) {
+        formulario.elements.namedItem('idCliente').value =
+            movimientoEditar.id_cliente;
+
+        formulario.elements.namedItem('camion').value =
+            movimientoEditar.camion_origen;
+
+        formulario.elements.namedItem('llenos').value =
+            movimientoEditar.llenos;
+
+        formulario.elements.namedItem('observacion').value =
+            movimientoEditar.observacion || '';
+    }
 
     conectarCancelar();
 
+    formulario.addEventListener('submit', async event => {
 
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
+        event.preventDefault();
 
-                event.preventDefault();
+        const botonEnviar = event.submitter;
 
-                const form =
-                    new FormData(event.target);
+        if (botonEnviar) {
+            botonEnviar.disabled = true;
+        }
 
-                try {
-                    await entregaCliente({
+        const form = new FormData(formulario);
 
-                        idCliente:
-                            form.get('idCliente'),
+        try {
 
-                        camion:
-                            form.get('camion'),
+            if (modoEdicion) {
 
-                        cantidad:
-                            form.get('llenos'),
+                await editarUltimaEntregaCliente({
+                    idCliente: form.get('idCliente'),
+                    camion: form.get('camion'),
+                    cantidad: form.get('llenos'),
+                    observacion: form.get('observacion')
+                });
 
-                        observacion:
-                            form.get('observacion')
+                mostrarExito('ENTREGA MODIFICADA');
 
-                    });
+            } else {
 
+                await entregaCliente({
+                    idCliente: form.get('idCliente'),
+                    camion: form.get('camion'),
+                    cantidad: form.get('llenos'),
+                    observacion: form.get('observacion')
+                });
 
-                    mostrarExito(
-                        'ENTREGA REGISTRADA'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
+                mostrarExito('ENTREGA REGISTRADA');
             }
-        );
+
+        } catch (error) {
+
+            mostrarError(error.message);
+
+            if (botonEnviar) {
+                botonEnviar.disabled = false;
+            }
+        }
+    });
 }
 
 
@@ -2289,15 +2371,11 @@ async function renderClientes() {
     const clientes =
         await obtenerClientes();
 
-    const disponibles =
-        await obtenerPendientesInicialesSinAsignar();
-
     app.innerHTML = `
 
         <header class="app-header">
 
             <h1>CLIENTES</h1>
-
             <p>Clientes activos</p>
 
         </header>
@@ -2319,26 +2397,6 @@ async function renderClientes() {
             >
                 📦 ASIGNAR PENDIENTES INICIALES
             </button>
-
-
-            <div class="card">
-
-                <div class="card-title">
-                    Pendientes iniciales disponibles
-                </div>
-
-                <div class="stat-value">
-                    ${disponibles}
-                </div>
-
-                <div class="list-item-sub">
-                    Estos cilindros ya forman parte del inventario
-                    de CLIENTES y solo serán distribuidos entre
-                    los clientes.
-                </div>
-
-            </div>
-
 
             <div class="card">
 
@@ -2382,9 +2440,14 @@ async function renderClientes() {
                                         </div>
 
                                         <div class="list-item-sub">
-                                            📦 ${cliente.pendientes_actuales}
-                                            pendientes
-                                        </div>
+    📦 ${cliente.pendientes_actuales} pendientes
+</div>
+
+<div class="list-item-sub">
+    ${cliente.asignacion_inicial?.realizada
+                        ? '✓ Asignación inicial realizada'
+                        : '○ Sin asignación inicial'}
+</div>
 
                                         ${cliente.telefono
                         ? `
@@ -2434,245 +2497,185 @@ async function renderClientes() {
 
 async function formularioPendientesIniciales() {
 
-    const clientes =
-        await obtenerClientes();
+    const clientes = await obtenerClientes();
 
-    const disponibles =
-        await obtenerPendientesInicialesSinAsignar();
-
+    const disponibles = clientes.filter(cliente =>
+        !cliente.asignacion_inicial?.realizada &&
+        (cliente.pendientes_actuales || 0) === 0
+    );
 
     app.innerHTML = `
 
         <header class="app-header">
 
-            <h1>PENDIENTES INICIALES</h1>
+            <h1>ASIGNACIÓN INICIAL</h1>
 
             <p>
-                Distribuye los pendientes que ya existen
-                en el inventario de CLIENTES.
+                Incorpora los cilindros pendientes
+                de retirar de un cliente al inventario.
             </p>
 
         </header>
-
 
         <main class="main-content">
 
             <div class="card">
 
                 <div class="card-title">
-                    Pendientes disponibles
+                    Asignar pendientes a un cliente
                 </div>
 
-                <div class="stat-value">
-                    ${disponibles}
-                </div>
+                ${disponibles.length === 0 ? `
 
-            </div>
+                    <p>
+                        No hay clientes disponibles para
+                        realizar una asignación inicial.
+                    </p>
 
+                ` : `
 
-            <div class="card">
-
-                <div class="card-title">
-                    Asignar a clientes
-                </div>
-
-
-                <form id="formPendientesIniciales">
-
-                    ${clientes.map(cliente => `
+                    <form id="formPendientesIniciales">
 
                         <div class="form-group">
 
-                            <label>
-                                ${cliente.nombre}
+                            <label for="clienteInicial">
+                                Seleccionar cliente
+                            </label>
+
+                            <select
+                                id="clienteInicial"
+                                required
+                            >
+
+                                <option value="">
+                                    Selecciona un cliente
+                                </option>
+
+                                ${disponibles.map(cliente => `
+
+                                    <option value="${cliente.id_cliente}">
+                                        ${cliente.nombre}
+                                    </option>
+
+                                `).join('')}
+
+                            </select>
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label for="cantidadInicial">
+                                Cantidad de cilindros pendientes
                             </label>
 
                             <input
                                 type="number"
-                                min="0"
+                                id="cantidadInicial"
+                                min="1"
                                 step="1"
-                                class="input-pendiente-inicial"
-                                data-id="${cliente.id_cliente}"
-                                value="0"
+                                placeholder="Ejemplo: 10"
+                                required
                             >
 
                         </div>
 
-                    `).join('')}
+
+                        <div class="card">
+
+                            <div class="list-item-sub">
+                                Esta asignación solo puede
+                                realizarse una vez por cliente.
+                            </div>
+
+                            <div class="list-item-sub">
+                                Los cilindros se incorporarán
+                                directamente al inventario de CLIENTES.
+                            </div>
+
+                        </div>
 
 
-                    <div class="card">
+                        <button
+                            type="submit"
+                            class="primary-button"
+                        >
+                            REGISTRAR ASIGNACIÓN
+                        </button>
 
-                        <strong>
-                            Total a asignar:
-                        </strong>
+                    </form>
 
-                        <span id="totalPendientesAsignar">
-                            0
-                        </span>
+                `}
 
-                    </div>
-
-
-                    <button
-                        type="submit"
-                        class="primary-button"
-                    >
-                        GUARDAR ASIGNACIONES
-                    </button>
-
-
-                    <button
-                        type="button"
-                        class="secondary-button"
-                        id="btnCancelarPendientesIniciales"
-                    >
-                        CANCELAR
-                    </button>
-
-                </form>
+                <button
+                    type="button"
+                    class="secondary-button"
+                    id="btnCancelarPendientesIniciales"
+                >
+                    CANCELAR
+                </button>
 
             </div>
 
         </main>
 
-
         ${renderNav('clientes')}
+
     `;
 
 
-    const inputs =
-        document.querySelectorAll(
-            '.input-pendiente-inicial'
-        );
+    document
+        .getElementById('formPendientesIniciales')
+        ?.addEventListener('submit', async event => {
 
-    const total =
-        document.getElementById(
-            'totalPendientesAsignar'
-        );
+            event.preventDefault();
 
-
-    function actualizarTotal() {
-
-        let suma = 0;
-
-        inputs.forEach(input => {
+            const idCliente =
+                document.getElementById('clienteInicial').value;
 
             const cantidad =
-                Number(input.value) || 0;
+                Number(document.getElementById('cantidadInicial').value);
 
-            suma += cantidad;
+            if (!idCliente) {
+
+                alert('Selecciona un cliente.');
+
+                return;
+            }
+
+            if (!Number.isInteger(cantidad) || cantidad <= 0) {
+
+                alert('Ingresa una cantidad entera mayor que cero.');
+
+                return;
+            }
+
+            try {
+
+                await asignarPendienteInicial(
+                    idCliente,
+                    cantidad
+                );
+
+                alert(
+                    'Asignación inicial registrada correctamente.'
+                );
+
+                await renderClientes();
+
+            } catch (error) {
+
+                alert(error.message);
+
+            }
 
         });
 
-        total.textContent = suma;
-    }
-
-
-    inputs.forEach(input => {
-
-        input.addEventListener(
-            'input',
-            actualizarTotal
-        );
-
-    });
-
 
     document
-        .getElementById(
-            'formPendientesIniciales'
-        )
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const asignaciones =
-                    [];
-
-                inputs.forEach(input => {
-
-                    asignaciones.push({
-
-                        idCliente:
-                            input.dataset.id,
-
-                        cantidad:
-                            Number(input.value) || 0
-
-                    });
-
-                });
-
-
-                const totalAsignar =
-                    asignaciones.reduce(
-                        (suma, item) =>
-                            suma +
-                            item.cantidad,
-                        0
-                    );
-
-
-                if (totalAsignar === 0) {
-
-                    alert(
-                        'Debes asignar al menos un pendiente.'
-                    );
-
-                    return;
-                }
-
-
-                if (
-                    totalAsignar >
-                    disponibles
-                ) {
-
-                    alert(
-                        `No puedes asignar ${totalAsignar}. Solo hay ${disponibles} pendientes iniciales disponibles.`
-                    );
-
-                    return;
-                }
-
-
-                try {
-
-                    await asignarPendientesIniciales(
-                        asignaciones
-                    );
-
-
-                    alert(
-                        'Pendientes iniciales asignados correctamente.'
-                    );
-
-
-                    await renderClientes();
-
-                } catch (error) {
-
-                    alert(
-                        error.message
-                    );
-
-                }
-
-            }
-        );
-
-
-    document
-        .getElementById(
-            'btnCancelarPendientesIniciales'
-        )
-        .addEventListener(
-            'click',
-            renderClientes
-        );
+        .getElementById('btnCancelarPendientesIniciales')
+        .addEventListener('click', renderClientes);
 
 
     registrarNavegacion();
@@ -4244,4 +4247,143 @@ async function renderInventario() {
 
             }
         );
+}
+
+async function formularioCambiazo() {
+
+    const inventario = await obtenerInventario();
+
+    app.innerHTML = `
+
+        <header class="app-header">
+            <h1>CAMBIAZO</h1>
+            <p>Reclasificación de cilindros</p>
+        </header>
+
+        <main class="main-content">
+
+            <div class="card">
+
+                <div class="card-title">
+                    Inventario disponible
+                </div>
+
+                <div id="resumenCambiazo"></div>
+
+                <div class="form-group">
+                    <label>Camión</label>
+                    <select id="camionCambiazo">
+                        <option value="ROJO">ROJO</option>
+                        <option value="BLANCO">BLANCO</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Estado actual</label>
+                    <select id="estadoActualCambiazo">
+                        <option value="llenos">Llenos</option>
+                        <option value="vacios">Vacíos</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Nuevo estado</label>
+                    <select id="estadoNuevoCambiazo">
+                        <option value="vacios">Vacíos</option>
+                        <option value="llenos">Llenos</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Cantidad</label>
+                    <input
+                        type="number"
+                        id="cantidadCambiazo"
+                        min="1"
+                        step="1"
+                        placeholder="Cantidad de cilindros"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Motivo del cambiazo</label>
+                    <textarea
+                        id="observacionCambiazo"
+                        placeholder="Describe el motivo..."
+                    ></textarea>
+                </div>
+
+                <button
+                    class="primary-button"
+                    id="btnRegistrarCambiazo"
+                >
+                    REGISTRAR CAMBIAZO
+                </button>
+
+                <button
+                    class="secondary-button"
+                    id="btnCancelarCambiazo"
+                    style="margin-top:10px;"
+                >
+                    CANCELAR
+                </button>
+
+            </div>
+
+        </main>
+    `;
+
+    const camion = document.getElementById('camionCambiazo');
+    const resumen = document.getElementById('resumenCambiazo');
+
+    function actualizarResumen() {
+
+        const ubicacion = camion.value.toLowerCase();
+        const datos = inventario[ubicacion];
+
+        resumen.innerHTML = `
+            <p>🟢 Llenos: <strong>${datos?.llenos || 0}</strong></p>
+            <p>⚪ Vacíos: <strong>${datos?.vacios || 0}</strong></p>
+        `;
+    }
+
+    camion.addEventListener('change', actualizarResumen);
+
+    actualizarResumen();
+
+    document
+        .getElementById('btnRegistrarCambiazo')
+        .addEventListener('click', async () => {
+
+            try {
+
+                const cantidad = Number(
+                    document.getElementById('cantidadCambiazo').value
+                );
+
+                const movimiento = await cambiazo({
+
+                    ubicacion: camion.value,
+                    estadoActual: document.getElementById('estadoActualCambiazo').value,
+                    estadoNuevo: document.getElementById('estadoNuevoCambiazo').value,
+                    cantidad,
+                    observacion: document.getElementById('observacionCambiazo').value
+
+                });
+
+                alert('Cambiazo registrado correctamente.');
+
+                await renderMovimientos();
+
+            } catch (error) {
+
+                alert(error.message);
+
+            }
+
+        });
+
+    document
+        .getElementById('btnCancelarCambiazo')
+        .addEventListener('click', mostrarTiposMovimiento);
 }

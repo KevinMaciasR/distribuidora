@@ -1,7 +1,8 @@
 import {
     obtener,
     guardar,
-    obtenerTodos
+    obtenerTodos, 
+    ejecutarTransaccionAtomica
 } from './db.js';
 
 
@@ -126,13 +127,19 @@ export async function obtenerInventario() {
             'inventario',
             UBICACIONES.SIN_ASIGNAR
         );
+const viajesPlanta =
+    await obtenerTodos('viajes_planta');
 
+const viajesAbiertos = viajesPlanta.filter(
+    viaje => viaje.estado === 'ABIERTO'
+);
 
     return {
         rojo,
         blanco,
         clientes,
-        sinAsignar
+        sinAsignar,
+        viajesAbiertos
     };
 }
 
@@ -241,29 +248,35 @@ function validarNoNegativos(inventario) {
 export function calcularTotal(inventario) {
 
     const rojo =
-        (inventario.rojo?.llenos || 0) +
-        (inventario.rojo?.vacios || 0);
-
+        Number(inventario.rojo?.llenos || 0) +
+        Number(inventario.rojo?.vacios || 0);
 
     const blanco =
-        (inventario.blanco?.llenos || 0) +
-        (inventario.blanco?.vacios || 0);
-
+        Number(inventario.blanco?.llenos || 0) +
+        Number(inventario.blanco?.vacios || 0);
 
     const clientes =
-        inventario.clientes?.pendientes || 0;
-
+        Number(inventario.clientes?.pendientes || 0);
 
     const sinAsignar =
-        (inventario.sinAsignar?.llenos || 0) +
-        (inventario.sinAsignar?.vacios || 0);
+        Number(inventario.sinAsignar?.llenos || 0) +
+        Number(inventario.sinAsignar?.vacios || 0);
 
+    const planta =
+        (inventario.viajesAbiertos || []).reduce(
+            (total, viaje) =>
+                total +
+                Number(viaje.vacios_enviados || 0) -
+                Number(viaje.llenos_recibidos || 0),
+            0
+        );
 
     return (
         rojo +
         blanco +
         clientes +
-        sinAsignar
+        sinAsignar +
+        planta
     );
 }
 
@@ -366,69 +379,61 @@ export async function configurarApertura({
 /* =====================================================
    AÑADIR CILINDROS SIN ASIGNAR
 ===================================================== */
-
 export async function agregarSinAsignar({
     llenos = 0,
     vacios = 0,
     observacion = ''
 }) {
-
     llenos = Number(llenos);
     vacios = Number(vacios);
 
-
-    validarCantidad(
-        llenos,
-        vacios
-    );
-
+    validarCantidad(llenos, vacios);
 
     if (llenos === 0 && vacios === 0) {
-
-        throw new Error(
-            'Debes agregar al menos un cilindro.'
-        );
-
+        throw new Error('Debes agregar al menos un cilindro.');
     }
 
+    return ejecutarTransaccionAtomica(
+        ['inventario', 'movimientos'],
+        (datos) => {
+            const actual = datos.inventario.find(
+                i => i.ubicacion === UBICACIONES.SIN_ASIGNAR
+            );
 
-    const actual =
-        await obtener(
-            'inventario',
-            UBICACIONES.SIN_ASIGNAR
-        );
+            if (!actual) {
+                throw new Error('No existe la ubicación SIN ASIGNAR.');
+            }
 
+            const actualizado = {
+                ...actual,
+                llenos: (actual.llenos || 0) + llenos,
+                vacios: (actual.vacios || 0) + vacios
+            };
 
-    if (!actual) {
-
-        throw new Error(
-            'No existe la ubicación SIN ASIGNAR.'
-        );
-
-    }
-
-
-    await guardar(
-        'inventario',
-        {
-            ...actual,
-            llenos:
-                (actual.llenos || 0) +
+            const movimiento = {
+                id_movimiento: crypto.randomUUID(),
+                fecha_hora: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                tipo: 'AGREGAR SIN ASIGNAR',
+                ubicacion: UBICACIONES.SIN_ASIGNAR,
                 llenos,
-            vacios:
-                (actual.vacios || 0) +
-                vacios
+                vacios,
+                observacion,
+                estado: 'ACTIVO',
+                sync_estado: 'PENDIENTE',
+                dispositivo: 'MOVIL'
+            };
+
+            return {
+                resultado: { llenos, vacios, observacion },
+                puts: {
+                    inventario: [actualizado],
+                    movimientos: [movimiento]
+                }
+            };
         }
     );
-
-
-    return {
-        llenos,
-        vacios,
-        observacion
-    };
 }
-
 
 /* =====================================================
    RETIRAR CILINDROS SIN ASIGNAR
@@ -439,81 +444,68 @@ export async function retirarSinAsignar({
     vacios = 0,
     observacion = ''
 }) {
-
     llenos = Number(llenos);
     vacios = Number(vacios);
 
-
-    validarCantidad(
-        llenos,
-        vacios
-    );
-
+    validarCantidad(llenos, vacios);
 
     if (llenos === 0 && vacios === 0) {
-
-        throw new Error(
-            'Debes retirar al menos un cilindro.'
-        );
-
+        throw new Error('Debes retirar al menos un cilindro.');
     }
 
+    return ejecutarTransaccionAtomica(
+        ['inventario', 'movimientos'],
+        (datos) => {
+            const actual = datos.inventario.find(
+                i => i.ubicacion === UBICACIONES.SIN_ASIGNAR
+            );
 
-    const actual =
-        await obtener(
-            'inventario',
-            UBICACIONES.SIN_ASIGNAR
-        );
+            if (!actual) {
+                throw new Error('No existe la ubicación SIN ASIGNAR.');
+            }
 
+            if (llenos > (actual.llenos || 0)) {
+                throw new Error(
+                    `No puedes retirar ${llenos} llenos. Solo hay ${actual.llenos || 0} sin asignar.`
+                );
+            }
 
-    if (!actual) {
+            if (vacios > (actual.vacios || 0)) {
+                throw new Error(
+                    `No puedes retirar ${vacios} vacíos. Solo hay ${actual.vacios || 0} sin asignar.`
+                );
+            }
 
-        throw new Error(
-            'No existe la ubicación SIN ASIGNAR.'
-        );
+            const actualizado = {
+                ...actual,
+                llenos: (actual.llenos || 0) - llenos,
+                vacios: (actual.vacios || 0) - vacios
+            };
 
-    }
-
-
-    if (llenos > (actual.llenos || 0)) {
-
-        throw new Error(
-            `No puedes retirar ${llenos} llenos. Solo hay ${actual.llenos || 0} sin asignar.`
-        );
-
-    }
-
-
-    if (vacios > (actual.vacios || 0)) {
-
-        throw new Error(
-            `No puedes retirar ${vacios} vacíos. Solo hay ${actual.vacios || 0} sin asignar.`
-        );
-
-    }
-
-
-    await guardar(
-        'inventario',
-        {
-            ...actual,
-            llenos:
-                (actual.llenos || 0) -
+            const movimiento = {
+                id_movimiento: crypto.randomUUID(),
+                fecha_hora: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                tipo: 'RETIRAR SIN ASIGNAR',
+                ubicacion: UBICACIONES.SIN_ASIGNAR,
                 llenos,
-            vacios:
-                (actual.vacios || 0) -
-                vacios
+                vacios,
+                observacion,
+                estado: 'ACTIVO',
+                sync_estado: 'PENDIENTE',
+                dispositivo: 'MOVIL'
+            };
+
+            return {
+                resultado: { llenos, vacios, observacion },
+                puts: {
+                    inventario: [actualizado],
+                    movimientos: [movimiento]
+                }
+            };
         }
     );
-
-
-    return {
-        llenos,
-        vacios,
-        observacion
-    };
 }
-
 
 /* =====================================================
    ASIGNAR DESDE SIN ASIGNAR A CAMIÓN
@@ -524,108 +516,90 @@ export async function asignarACamion({
     llenos = 0,
     vacios = 0
 }) {
-
     if (
         camion !== UBICACIONES.ROJO &&
         camion !== UBICACIONES.BLANCO
     ) {
-
-        throw new Error(
-            'El destino debe ser ROJO o BLANCO.'
-        );
-
+        throw new Error('El destino debe ser ROJO o BLANCO.');
     }
-
 
     llenos = Number(llenos);
     vacios = Number(vacios);
 
-
-    validarCantidad(
-        llenos,
-        vacios
-    );
-
+    validarCantidad(llenos, vacios);
 
     if (llenos === 0 && vacios === 0) {
-
-        throw new Error(
-            'Debes asignar al menos un cilindro.'
-        );
-
+        throw new Error('Debes asignar al menos un cilindro.');
     }
 
+    return ejecutarTransaccionAtomica(
+        ['inventario', 'movimientos'],
+        (datos) => {
+            const sinAsignar = datos.inventario.find(
+                i => i.ubicacion === UBICACIONES.SIN_ASIGNAR
+            );
 
-    const sinAsignar =
-        await obtener(
-            'inventario',
-            UBICACIONES.SIN_ASIGNAR
-        );
+            const destino = datos.inventario.find(
+                i => i.ubicacion === camion
+            );
 
+            if (!sinAsignar || !destino) {
+                throw new Error('No se encontró el inventario necesario.');
+            }
 
-    const destino =
-        await obtener(
-            'inventario',
-            camion
-        );
+            if (llenos > (sinAsignar.llenos || 0)) {
+                throw new Error(
+                    `No hay suficientes llenos sin asignar. Disponibles: ${sinAsignar.llenos || 0}.`
+                );
+            }
 
+            if (vacios > (sinAsignar.vacios || 0)) {
+                throw new Error(
+                    `No hay suficientes vacíos sin asignar. Disponibles: ${sinAsignar.vacios || 0}.`
+                );
+            }
 
-    if (!sinAsignar || !destino) {
+            const origenActualizado = {
+                ...sinAsignar,
+                llenos: (sinAsignar.llenos || 0) - llenos,
+                vacios: (sinAsignar.vacios || 0) - vacios
+            };
 
-        throw new Error(
-            'No se encontró el inventario necesario.'
-        );
+            const destinoActualizado = {
+                ...destino,
+                llenos: (destino.llenos || 0) + llenos,
+                vacios: (destino.vacios || 0) + vacios
+            };
 
-    }
-
-
-    if (llenos > (sinAsignar.llenos || 0)) {
-
-        throw new Error(
-            `No hay suficientes cilindros llenos sin asignar. Disponibles: ${sinAsignar.llenos || 0}.`
-        );
-
-    }
-
-
-    if (vacios > (sinAsignar.vacios || 0)) {
-
-        throw new Error(
-            `No hay suficientes cilindros vacíos sin asignar. Disponibles: ${sinAsignar.vacios || 0}.`
-        );
-
-    }
-
-
-    await guardar(
-        'inventario',
-        {
-            ...sinAsignar,
-            llenos:
-                (sinAsignar.llenos || 0) -
+            const movimiento = {
+                id_movimiento: crypto.randomUUID(),
+                fecha_hora: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                tipo: 'ASIGNAR A CAMION',
+                camion_destino: camion,
                 llenos,
-            vacios:
-                (sinAsignar.vacios || 0) -
-                vacios
+                vacios,
+                estado: 'ACTIVO',
+                sync_estado: 'PENDIENTE',
+                dispositivo: 'MOVIL'
+            };
+
+            return {
+                resultado: {
+                    camion,
+                    llenos,
+                    vacios
+                },
+                puts: {
+                    inventario: [
+                        origenActualizado,
+                        destinoActualizado
+                    ],
+                    movimientos: [movimiento]
+                }
+            };
         }
     );
-
-
-    await guardar(
-        'inventario',
-        {
-            ...destino,
-            llenos:
-                (destino.llenos || 0) +
-                llenos,
-            vacios:
-                (destino.vacios || 0) +
-                vacios
-        }
-    );
-
-
-    return obtenerInventario();
 }
 
 

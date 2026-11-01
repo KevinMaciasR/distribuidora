@@ -1520,3 +1520,37 @@ textarea.form-control {
 #listaMovimientos .list {
     min-width: 0;
 }
+/* Acciones pequeñas del historial */
+.acciones-movimiento {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    justify-content: flex-end;
+}
+
+.btn-accion {
+    width: auto;
+    min-width: 75px;
+    padding: 6px 11px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-editar {
+    background: #eef3f8;
+    color: #315675;
+    border: 1px solid #cbd8e3;
+}
+
+.btn-anular {
+    background: #fff0f0;
+    color: #a83232;
+    border: 1px solid #efcccc;
+}
+
+.btn-accion:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
