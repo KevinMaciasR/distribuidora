@@ -30,7 +30,12 @@ android.widget.Toast.makeText(
 ).show();
         String nombre = call.getString("nombre");
         String contenido = call.getString("contenido");
-
+android.widget.Toast.makeText(
+    getContext(),
+    "DIAGNÓSTICO\nNombre: " + (nombre == null ? "NULL" : "OK") +
+    "\nContenido: " + (contenido == null ? "NULL" : "OK"),
+    android.widget.Toast.LENGTH_LONG
+).show();
         if (nombre == null || contenido == null) {
             call.reject("Faltan datos para guardar el respaldo.");
             return;
