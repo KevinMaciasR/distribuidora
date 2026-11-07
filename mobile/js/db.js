@@ -414,9 +414,14 @@ async function obtenerDatosCompletos() {
 ========================================= */
 
 export async function exportarBaseDatos() {
-
+alert('PUNTO 2: ENTRÓ A exportarBaseDatos');
     const copia = await obtenerDatosCompletos();
-
+alert(
+    'PUNTO 3: SE LEYÓ INDEXEDDB\n\n' +
+    'Almacenes: ' + copia.stores.length + '\n' +
+    'Clientes: ' + (copia.datos.clientes?.length ?? 0) + '\n' +
+    'Movimientos: ' + (copia.datos.movimientos?.length ?? 0)
+);
     const respaldo = {
         formato: 'RESPALDO_DISTRIBUIDORA',
         version: 2,
@@ -427,10 +432,16 @@ export async function exportarBaseDatos() {
     };
 
     const contenido = JSON.stringify(respaldo, null, 2);
+   alert(
+    'DIAGNÓSTICO DEL RESPALDO\n\n' +
+    'Caracteres generados: ' + contenido.length + '\n' +
+    'Clientes encontrados: ' + (copia.datos.clientes?.length ?? 0) + '\n' +
+    'Almacenes incluidos: ' + copia.stores.length
+);
     const nombre = obtenerNombreRespaldo();
 
     // ANDROID / CAPACITOR
-    if (Capacitor.isNativePlatform()) {
+    /*if (Capacitor.isNativePlatform()) {
 
         await Respaldo.guardarArchivo({
             nombre,
@@ -438,8 +449,21 @@ export async function exportarBaseDatos() {
         });
 
         return nombre;
-    }
+    }*/
+if (Capacitor.isNativePlatform()) {
 
+    alert(
+        'PUNTO 5: ANDROID DETECTADO\n\n' +
+        'Nombre: ' + nombre + '\n' +
+        'Caracteres enviados: ' + contenido.length
+    );
+
+    await Respaldo.guardarArchivo({nombre, contenido});
+
+    alert('PUNTO 6: ANDROID DEVOLVIÓ RESPUESTA CORRECTA');
+
+    return nombre;
+}
     // NAVEGADOR
     const blob = new Blob(
         [contenido],

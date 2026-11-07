@@ -649,7 +649,7 @@ ${tarjetasViajes}
         ?.addEventListener(
             'click',
             async () => {
-
+alert('PUNTO 1: SE PRESIONÓ EL BOTÓN EXPORTAR BD');
                 try {
 
                     const nombre =

@@ -23,7 +23,11 @@ public class RespaldoPlugin extends Plugin {
 
     @PluginMethod
     public void guardarArchivo(PluginCall call) {
-
+android.widget.Toast.makeText(
+    getContext(),
+    "PUNTO 7: PLUGIN JAVA RECIBIÓ LA SOLICITUD",
+    android.widget.Toast.LENGTH_LONG
+).show();
         String nombre = call.getString("nombre");
         String contenido = call.getString("contenido");
 
@@ -35,7 +39,11 @@ public class RespaldoPlugin extends Plugin {
         llamadaPendiente = call;
         contenidoPendiente = contenido.getBytes(
             java.nio.charset.StandardCharsets.UTF_8
-        );
+        );android.widget.Toast.makeText(
+    getContext(),
+    "PUNTO 8: CARACTERES RECIBIDOS: " + contenido.length(),
+    android.widget.Toast.LENGTH_LONG
+).show();
 
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -78,7 +86,11 @@ public class RespaldoPlugin extends Plugin {
         ) {
             salida.write(contenidoPendiente);
             salida.flush();
-
+android.widget.Toast.makeText(
+    getContext(),
+    "PUNTO 9: BYTES ESCRITOS: " + contenidoPendiente.length,
+    android.widget.Toast.LENGTH_LONG
+).show();
             contenidoPendiente = null;
 
             call.resolve();
