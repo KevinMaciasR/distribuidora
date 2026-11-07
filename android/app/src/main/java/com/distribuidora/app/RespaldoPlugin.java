@@ -55,8 +55,18 @@ android.widget.Toast.makeText(
         intent.setType("application/json");
         intent.putExtra(Intent.EXTRA_TITLE, nombre);
 
-        startActivityForResult(call, intent, REQUEST_GUARDAR);
-    }
+try {
+    startActivityForResult(call, intent, REQUEST_GUARDAR);
+
+    android.widget.Toast.makeText(
+        getContext(),
+        "PUNTO 10: SOLICITUD DEL SELECTOR ENVIADA",
+        android.widget.Toast.LENGTH_LONG
+    ).show();
+
+} catch (Exception error) {
+    call.reject("ERROR AL ABRIR SELECTOR: " + error.getMessage());
+}    }
 
     @Override
     protected void handleOnActivityResult(
@@ -65,7 +75,13 @@ android.widget.Toast.makeText(
         Intent data
     ) {
         super.handleOnActivityResult(requestCode, resultCode, data);
-
+android.widget.Toast.makeText(
+    getContext(),
+    "PUNTO 11: RESULTADO ANDROID\n" +
+    "Código: " + resultCode +
+    "\nData: " + (data == null ? "NULL" : "OK"),
+    android.widget.Toast.LENGTH_LONG
+).show();
         if (requestCode != REQUEST_GUARDAR || llamadaPendiente == null) {
             return;
         }
@@ -80,7 +96,11 @@ android.widget.Toast.makeText(
         }
 
         Uri uri = data.getData();
-
+android.widget.Toast.makeText(
+    getContext(),
+    "PUNTO 12: URI\n" + (uri == null ? "NULL" : uri.toString()),
+    android.widget.Toast.LENGTH_LONG
+).show();
         try (
             ParcelFileDescriptor descriptor =
                 getContext().getContentResolver()
@@ -91,6 +111,12 @@ android.widget.Toast.makeText(
         ) {
             salida.write(contenidoPendiente);
             salida.flush();
+            android.widget.Toast.makeText(
+    getContext(),
+    "PUNTO 13: ESCRITURA COMPLETADA\nBytes: " +
+    contenidoPendiente.length,
+    android.widget.Toast.LENGTH_LONG
+).show();
 android.widget.Toast.makeText(
     getContext(),
     "PUNTO 9: BYTES ESCRITOS: " + contenidoPendiente.length,
