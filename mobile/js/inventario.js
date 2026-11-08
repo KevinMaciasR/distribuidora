@@ -9,10 +9,10 @@ import {
 export const UBICACIONES = {
     ROJO: 'ROJO',
     BLANCO: 'BLANCO',
+    CASA: 'CASA',
     CLIENTES: 'CLIENTES',
     SIN_ASIGNAR: 'SIN ASIGNAR'
 };
-
 
 /* =====================================================
    INICIALIZAR INVENTARIO
@@ -58,7 +58,20 @@ export async function inicializarInventario() {
         });
 
     }
+    const casa =
+        inventario.find(
+            item => item.ubicacion === UBICACIONES.CASA
+        );
 
+    if (!casa) {
+
+        await guardar('inventario', {
+            ubicacion: UBICACIONES.CASA,
+            llenos: 0,
+            vacios: 0
+        });
+
+    }
 
     const clientes =
         inventario.find(
@@ -113,7 +126,11 @@ export async function obtenerInventario() {
             'inventario',
             UBICACIONES.BLANCO
         );
-
+    const casa =
+        await obtener(
+            'inventario',
+            UBICACIONES.CASA
+        );
 
     const clientes =
         await obtener(
@@ -137,6 +154,7 @@ const viajesAbiertos = viajesPlanta.filter(
     return {
         rojo,
         blanco,
+           casa,
         clientes,
         sinAsignar,
         viajesAbiertos
@@ -254,7 +272,9 @@ export function calcularTotal(inventario) {
     const blanco =
         Number(inventario.blanco?.llenos || 0) +
         Number(inventario.blanco?.vacios || 0);
-
+    const casa =
+        Number(inventario.casa?.llenos || 0) +
+        Number(inventario.casa?.vacios || 0);
     const clientes =
         Number(inventario.clientes?.pendientes || 0);
 
@@ -274,6 +294,7 @@ export function calcularTotal(inventario) {
     return (
         rojo +
         blanco +
+        casa + 
         clientes +
         sinAsignar +
         planta
@@ -290,6 +311,8 @@ export async function configurarApertura({
     rojoVacios,
     blancoLlenos,
     blancoVacios,
+    casaLlenos = 0,
+    casaVacios = 0,
     clientesPendientes
 }) {
 
@@ -306,11 +329,13 @@ export async function configurarApertura({
     }
 
 
-    const valores = [
+        const valores = [
         rojoLlenos,
         rojoVacios,
         blancoLlenos,
         blancoVacios,
+        casaLlenos,
+        casaVacios,
         clientesPendientes
     ];
 
@@ -348,7 +373,14 @@ export async function configurarApertura({
             vacios: blancoVacios
         }
     );
-
+    await guardar(
+        'inventario',
+        {
+            ubicacion: UBICACIONES.CASA,
+            llenos: casaLlenos,
+            vacios: casaVacios
+        }
+    );
 
     await guardar(
         'inventario',
@@ -517,11 +549,18 @@ export async function asignarACamion({
     vacios = 0
 }) {
     if (
-        camion !== UBICACIONES.ROJO &&
-        camion !== UBICACIONES.BLANCO
-    ) {
-        throw new Error('El destino debe ser ROJO o BLANCO.');
-    }
+    ![
+        UBICACIONES.ROJO,
+        UBICACIONES.BLANCO,
+        UBICACIONES.CASA
+    ].includes(camion)
+) {
+
+    throw new Error(
+        'El destino debe ser ROJO, BLANCO o CASA.'
+    );
+
+}
 
     llenos = Number(llenos);
     vacios = Number(vacios);

@@ -495,7 +495,14 @@ if (Capacitor.isNativePlatform()) {
 ========================================= */
 
 function validarRespaldo(respaldo, storesActuales) {
-
+alert(
+    'DIAGNÓSTICO DE IMPORTACIÓN\n\n' +
+    'Almacenes: ' + storesActuales.length + '\n' +
+    'Clientes del respaldo: ' +
+    respaldo.datos.clientes.length + '\n' +
+    'Movimientos del respaldo: ' +
+    respaldo.datos.movimientos.length
+);
     if (!respaldo || typeof respaldo !== 'object') {
         throw new Error('El respaldo está vacío o no es válido.');
     }
@@ -613,9 +620,20 @@ export async function importarBaseDatos(archivo) {
 
         let errorRestauracion = null;
 
-        transaction.oncomplete = () => {
-            resolve(true);
-        };
+        transaction.oncomplete = async () => {
+
+    const verificacion = await obtenerDatosCompletos();
+
+    alert(
+        'RESTAURACIÓN FINALIZADA\n\n' +
+        'Clientes guardados: ' +
+        verificacion.datos.clientes.length + '\n' +
+        'Movimientos guardados: ' +
+        verificacion.datos.movimientos.length
+    );
+
+    resolve(true);
+};
 
         transaction.onerror = () => {
             reject(

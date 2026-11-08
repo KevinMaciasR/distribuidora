@@ -2,8 +2,8 @@ import {
     guardar,
     obtener,
     obtenerTodos,
-    guardarInventarioYMovimiento, 
-    ejecutarTransaccionAtomica 
+    guardarInventarioYMovimiento,
+    ejecutarTransaccionAtomica
 } from './db.js';
 
 import {
@@ -75,10 +75,11 @@ async function obtenerCamion(nombre) {
 
     if (
         !camion ||
-        (
-            nombre !== UBICACIONES.ROJO &&
-            nombre !== UBICACIONES.BLANCO
-        )
+        ![
+            UBICACIONES.ROJO,
+            UBICACIONES.BLANCO,
+            UBICACIONES.CASA
+        ].includes(nombre)
     ) {
 
         throw new Error(
@@ -282,10 +283,13 @@ export async function entregaCliente({
     }
 
     if (
-        camion !== UBICACIONES.ROJO &&
-        camion !== UBICACIONES.BLANCO
+        ![
+            UBICACIONES.ROJO,
+            UBICACIONES.BLANCO,
+            UBICACIONES.CASA
+        ].includes(camion)
     ) {
-        throw new Error('El camión seleccionado no es válido.');
+        throw new Error('Selecciona una ubicación válida.');
     }
 
     const movimiento = {
@@ -406,8 +410,14 @@ export async function retiroCliente({
         );
     }
 
-    if (![UBICACIONES.ROJO, UBICACIONES.BLANCO].includes(camion)) {
-        throw new Error('Selecciona un camión válido.');
+    if (
+        ![
+            UBICACIONES.ROJO,
+            UBICACIONES.BLANCO,
+            UBICACIONES.CASA
+        ].includes(camion)
+    ) {
+        throw new Error('Selecciona una ubicación válida.');
     }
 
     if (typeof observacion !== 'string') {
@@ -542,8 +552,14 @@ export async function entregaRetiro({
         );
     }
 
-    if (![UBICACIONES.ROJO, UBICACIONES.BLANCO].includes(camion)) {
-        throw new Error('Selecciona un camión válido.');
+    if (
+        ![
+            UBICACIONES.ROJO,
+            UBICACIONES.BLANCO,
+            UBICACIONES.CASA
+        ].includes(camion)
+    ) {
+        throw new Error('Selecciona una ubicación válida.');
     }
 
     const movimiento = {
@@ -857,12 +873,18 @@ export async function trasladoCamiones({
         );
     }
 
+    const ubicacionesPermitidas = [
+        UBICACIONES.ROJO,
+        UBICACIONES.BLANCO,
+        UBICACIONES.CASA
+    ];
+
     if (
-        ![UBICACIONES.ROJO, UBICACIONES.BLANCO].includes(origen) ||
-        ![UBICACIONES.ROJO, UBICACIONES.BLANCO].includes(destino)
+        !ubicacionesPermitidas.includes(origen) ||
+        !ubicacionesPermitidas.includes(destino)
     ) {
         throw new Error(
-            'El traslado solo puede realizarse entre ROJO y BLANCO.'
+            'Selecciona ubicaciones válidas para realizar el traslado.'
         );
     }
 
@@ -995,17 +1017,17 @@ export async function anularUltimoMovimiento() {
         ['inventario', 'clientes', 'movimientos', 'viajes_planta'],
         (datos) => {
             const movimientos = datos.movimientos || [];
-const operacionesNoRegistradas = [
-    'AGREGAR SIN ASIGNAR',
-    'RETIRAR SIN ASIGNAR',
-    'ASIGNAR A CAMIÓN'
-];
+            const operacionesNoRegistradas = [
+                'AGREGAR SIN ASIGNAR',
+                'RETIRAR SIN ASIGNAR',
+                'ASIGNAR A CAMIÓN'
+            ];
             const activos = movimientos
                 .filter(m => m.estado === 'ACTIVO')
                 .sort((a, b) =>
-                    new Date(b.fecha_hora).getTime() -
-                    new Date(a.fecha_hora).getTime()
-                );
+    new Date(b.fecha_hora || b.created_at || 0).getTime() -
+    new Date(a.fecha_hora || a.created_at || 0).getTime()
+);
 
             const movimiento = activos[0];
 
@@ -1021,15 +1043,15 @@ const operacionesNoRegistradas = [
             const clientes = datos.clientes;
             const viajes = datos.viajes_planta;
 
-const buscarCamion = (nombre) => {
-    const ubicacion = inventario.find(i => i.ubicacion === nombre);
+            const buscarCamion = (nombre) => {
+                const ubicacion = inventario.find(i => i.ubicacion === nombre);
 
-    if (!ubicacion) {
-        throw new Error(`No se encontró el inventario de ${nombre}.`);
-    }
+                if (!ubicacion) {
+                    throw new Error(`No se encontró el inventario de ${nombre}.`);
+                }
 
-    return ubicacion;
-};
+                return ubicacion;
+            };
 
             const ajustar = (camion, campo, cambio) => {
                 const nuevoValor = Number(camion[campo] || 0) + cambio;
@@ -1119,72 +1141,112 @@ const buscarCamion = (nombre) => {
                 case TIPOS_MOVIMIENTO.CAMBIAZO: {
                     const camion = buscarCamion(movimiento.camion_origen);
                     const cantidad = Number(movimiento.cantidad || 0);
+                    const estadoOrigen =
+                        String(movimiento.estado_origen || '').toLowerCase();
 
-                    if (movimiento.estado_origen === 'LLENOS') {
-                        ajustar(camion, 'llenos', cantidad);
-                        ajustar(camion, 'vacios', -cantidad);
-                    } else {
-                        ajustar(camion, 'vacios', cantidad);
-                        ajustar(camion, 'llenos', -cantidad);
+                    const estadoNuevo =
+                        String(movimiento.estado_nuevo || '').toLowerCase();
+
+                    if (
+                        !['llenos', 'vacios'].includes(estadoOrigen) ||
+                        !['llenos', 'vacios'].includes(estadoNuevo) ||
+                        estadoOrigen === estadoNuevo
+                    ) {
+                        throw new Error(
+                            'El cambiazo original tiene estados inválidos.'
+                        );
                     }
+
+                    ajustar(camion, estadoOrigen, cantidad);
+                    ajustar(camion, estadoNuevo, -cantidad);
+
                     break;
                 }
-
                 case TIPOS_MOVIMIENTO.SALIDA_PLANTA: {
                     const camion = buscarCamion(movimiento.camion_origen);
+
+                    const viaje = viajes.find(
+                        v => v.id_viaje === movimiento.id_viaje
+                    );
+
+                    if (!viaje) {
+                        throw new Error(
+                            'No se encontró el viaje asociado a esta salida.'
+                        );
+                    }
+
+                    if (viaje.estado !== 'ABIERTO') {
+                        throw new Error(
+                            'El viaje ya no está abierto. No se puede anular esta salida.'
+                        );
+                    }
+
                     ajustar(camion, 'vacios', cantidadVacios);
 
-                    const viaje = viajes.find(
-                        v => v.id_viaje === movimiento.id_viaje
-                    );
+                    viaje.estado = 'ANULADO';
 
-                    if (viaje) {
-                        viaje.estado = 'ANULADO';
-                    }
                     break;
                 }
-
                 case TIPOS_MOVIMIENTO.REGRESO_PLANTA: {
                     const camion = buscarCamion(movimiento.camion_destino);
-                    ajustar(camion, 'llenos', -cantidadLlenos);
 
                     const viaje = viajes.find(
                         v => v.id_viaje === movimiento.id_viaje
                     );
 
-                    if (viaje) {
-                        viaje.estado = 'ABIERTO';
-                        delete viaje.id_movimiento_regreso;
+                    if (!viaje) {
+                        throw new Error(
+                            'No se encontró el viaje asociado a este regreso.'
+                        );
                     }
+
+                    if (
+                        viaje.estado !== 'CERRADO' ||
+                        viaje.id_movimiento_regreso !== movimiento.id_movimiento
+                    ) {
+                        throw new Error(
+                            'El viaje no coincide con el regreso que intentas anular.'
+                        );
+                    }
+
+                    ajustar(camion, 'llenos', -cantidadLlenos);
+
+                    viaje.estado = 'ABIERTO';
+
+                    delete viaje.id_movimiento_regreso;
+                    delete viaje.fecha_regreso;
+                    delete viaje.llenos_recibidos;
+
                     break;
                 }
-case 'AGREGAR SIN ASIGNAR': {
-    const ubicacion = buscarCamion(UBICACIONES.SIN_ASIGNAR);
 
-    ajustar(ubicacion, 'llenos', -cantidadLlenos);
-    ajustar(ubicacion, 'vacios', -cantidadVacios);
-    break;
-}
+                case 'AGREGAR SIN ASIGNAR': {
+                    const ubicacion = buscarCamion(UBICACIONES.SIN_ASIGNAR);
 
-case 'RETIRAR SIN ASIGNAR': {
-    const ubicacion = buscarCamion(UBICACIONES.SIN_ASIGNAR);
+                    ajustar(ubicacion, 'llenos', -cantidadLlenos);
+                    ajustar(ubicacion, 'vacios', -cantidadVacios);
+                    break;
+                }
 
-    ajustar(ubicacion, 'llenos', cantidadLlenos);
-    ajustar(ubicacion, 'vacios', cantidadVacios);
-    break;
-}
+                case 'RETIRAR SIN ASIGNAR': {
+                    const ubicacion = buscarCamion(UBICACIONES.SIN_ASIGNAR);
 
-case 'ASIGNAR A CAMION': {
-    const origen = buscarCamion(UBICACIONES.SIN_ASIGNAR);
-    const destino = buscarCamion(movimiento.camion_destino);
+                    ajustar(ubicacion, 'llenos', cantidadLlenos);
+                    ajustar(ubicacion, 'vacios', cantidadVacios);
+                    break;
+                }
 
-    ajustar(origen, 'llenos', cantidadLlenos);
-    ajustar(origen, 'vacios', cantidadVacios);
+                case 'ASIGNAR A CAMION': {
+                    const origen = buscarCamion(UBICACIONES.SIN_ASIGNAR);
+                    const destino = buscarCamion(movimiento.camion_destino);
 
-    ajustar(destino, 'llenos', -cantidadLlenos);
-    ajustar(destino, 'vacios', -cantidadVacios);
-    break;
-}
+                    ajustar(origen, 'llenos', cantidadLlenos);
+                    ajustar(origen, 'vacios', cantidadVacios);
+
+                    ajustar(destino, 'llenos', -cantidadLlenos);
+                    ajustar(destino, 'vacios', -cantidadVacios);
+                    break;
+                }
                 default:
                     throw new Error(
                         `No se puede anular este tipo de movimiento: ${movimiento.tipo}`
@@ -1224,139 +1286,876 @@ case 'ASIGNAR A CAMION': {
     );
 }
 
-export async function editarUltimaEntregaCliente({
-    idCliente,
-    camion,
-    cantidad,
-    observacion = ''
-}) {
-    cantidad = Number(cantidad);
 
-    if (!Number.isSafeInteger(cantidad) || cantidad <= 0) {
-        throw new Error('La cantidad debe ser un entero mayor que cero.');
-    }
 
-    if (![UBICACIONES.ROJO, UBICACIONES.BLANCO].includes(camion)) {
-        throw new Error('Selecciona un camión válido.');
-    }
+
+export async function editarUltimoMovimiento(datosNuevos) {
+
+    const {
+        tipo,
+        idCliente,
+        camion,
+        origen,
+        destino,
+        cantidad,
+        llenos,
+        vacios,
+        observacion = '',
+        retiroEspecial = false,
+        ubicacion,
+        estadoActual,
+        estadoNuevo
+    } = datosNuevos;
 
     return ejecutarTransaccionAtomica(
-        ['inventario', 'clientes', 'movimientos'],
+        ['inventario', 'clientes', 'movimientos', 'viajes_planta'],
         datos => {
-            const activos = datos.movimientos
+
+            const inventario = datos.inventario || [];
+            const clientes = datos.clientes || [];
+            const movimientos = datos.movimientos || [];
+            const viajes = datos.viajes_planta || [];
+
+            // =========================================
+            // 1. IDENTIFICAR EL ÚLTIMO MOVIMIENTO ACTIVO
+            // =========================================
+
+            const activos = movimientos
                 .filter(m => m.estado === 'ACTIVO')
                 .sort((a, b) =>
-                    new Date(b.fecha_hora || b.created_at).getTime() -
-                    new Date(a.fecha_hora || a.created_at).getTime()
-                );
+    new Date(b.fecha_hora || b.created_at || 0).getTime() -
+    new Date(a.fecha_hora || a.created_at || 0).getTime()
+);
 
             const original = activos[0];
 
-            if (!original || original.tipo !== TIPOS_MOVIMIENTO.ENTREGA_CLIENTE) {
-                throw new Error('El último movimiento activo no es una entrega a cliente.');
-            }
-
-            if (original.sync_estado !== 'PENDIENTE') {
-                throw new Error('El movimiento ya fue sincronizado y no puede editarse desde el móvil.');
-            }
-
-            const inventario = datos.inventario;
-            const clientes = datos.clientes;
-
-            const buscarCamion = nombre => {
-                const fila = inventario.find(i => i.ubicacion === nombre);
-                if (!fila) throw new Error(`No existe el inventario de ${nombre}.`);
-                return fila;
-            };
-
-            const clienteAnterior = clientes.find(
-                c => c.id_cliente === original.id_cliente
-            );
-
-            const clienteNuevo = clientes.find(
-                c => c.id_cliente === idCliente && c.estado === 'ACTIVO'
-            );
-
-            if (!clienteAnterior) {
-                throw new Error('No se encontró el cliente original.');
-            }
-
-            if (!clienteNuevo) {
-                throw new Error('Selecciona un cliente activo.');
-            }
-
-            const camionAnterior = buscarCamion(original.camion_origen);
-            const camionNuevo = buscarCamion(camion);
-
-            const cantidadAnterior = Number(original.llenos || 0);
-
-            if (
-                !Number.isSafeInteger(cantidadAnterior) ||
-                cantidadAnterior <= 0 ||
-                Number(clienteAnterior.pendientes_actuales || 0) < cantidadAnterior
-            ) {
-                throw new Error('No se puede revertir el movimiento original de forma segura.');
-            }
-
-            // Revertir la entrega anterior.
-            camionAnterior.llenos =
-                Number(camionAnterior.llenos || 0) + cantidadAnterior;
-
-            clienteAnterior.pendientes_actuales =
-                Number(clienteAnterior.pendientes_actuales || 0) - cantidadAnterior;
-
-            // Validar y aplicar la nueva entrega.
-            if (Number(camionNuevo.llenos || 0) < cantidad) {
+            if (!original) {
                 throw new Error(
-                    `El camión ${camion} no tiene suficientes cilindros llenos.`
+                    'No hay movimientos activos para editar.'
+                );
+            }
+            if (
+                original.tipo === TIPOS_MOVIMIENTO.REGRESO_PLANTA &&
+                datosNuevos.idViaje &&
+                datosNuevos.idViaje !== original.id_viaje
+            ) {
+                throw new Error(
+                    'No puedes cambiar el viaje asociado al regreso original.'
+                );
+            }
+            if (original.sync_estado !== 'PENDIENTE') {
+                throw new Error(
+                    'Este movimiento ya fue sincronizado y no puede editarse desde el móvil.'
                 );
             }
 
-            camionNuevo.llenos =
-                Number(camionNuevo.llenos || 0) - cantidad;
+            if (tipo && original.tipo !== tipo) {
+                throw new Error(
+                    'El tipo de movimiento no coincide con el registro original.'
+                );
+            }
 
-            clienteNuevo.pendientes_actuales =
-                Number(clienteNuevo.pendientes_actuales || 0) + cantidad;
+            if (
+    !datosNuevos.idMovimiento ||
+    datosNuevos.idMovimiento !== original.id_movimiento
+) {
+    throw new Error(
+        'El movimiento seleccionado ya no es el último movimiento activo.'
+    );
+}
 
-            clienteAnterior.sync_estado = 'PENDIENTE';
-            clienteNuevo.sync_estado = 'PENDIENTE';
+            // =========================================
+            // 2. FUNCIONES AUXILIARES
+            // =========================================
+
+            const buscarUbicacion = nombre => {
+
+                const fila = inventario.find(
+                    i => i.ubicacion === nombre
+                );
+
+                if (!fila) {
+                    throw new Error(
+                        `No existe el inventario de ${nombre}.`
+                    );
+                }
+
+                return fila;
+            };
+
+            const buscarCliente = id => {
+
+                const cliente = clientes.find(
+                    c => c.id_cliente === id
+                );
+
+                if (!cliente) {
+                    throw new Error(
+                        'No se encontró el cliente del movimiento.'
+                    );
+                }
+
+                return cliente;
+            };
+
+            const buscarClienteActivo = id => {
+
+                const cliente = clientes.find(
+                    c =>
+                        c.id_cliente === id &&
+                        c.estado === 'ACTIVO'
+                );
+
+                if (!cliente) {
+                    throw new Error(
+                        'Selecciona un cliente activo.'
+                    );
+                }
+
+                return cliente;
+            };
+
+            const ajustar = (fila, campo, cambio) => {
+
+                const nuevoValor =
+                    Number(fila[campo] || 0) + cambio;
+
+                if (
+                    !Number.isSafeInteger(nuevoValor) ||
+                    nuevoValor < 0
+                ) {
+                    throw new Error(
+                        `No hay existencias suficientes para modificar ${campo} en ${fila.ubicacion}.`
+                    );
+                }
+
+                fila[campo] = nuevoValor;
+            };
+
+            const ajustarPendiente = (cliente, cambio) => {
+
+                const nuevoValor =
+                    Number(cliente.pendientes_actuales || 0) + cambio;
+
+                if (
+                    !Number.isSafeInteger(nuevoValor) ||
+                    nuevoValor < 0
+                ) {
+                    throw new Error(
+                        `El cliente ${cliente.nombre || ''} no tiene pendientes suficientes para realizar esta modificación.`
+                    );
+                }
+
+                cliente.pendientes_actuales = nuevoValor;
+                cliente.sync_estado = 'PENDIENTE';
+            };
+
+            const obtenerCantidad = valor => {
+
+                const numero = Number(valor);
+
+                if (
+                    !Number.isSafeInteger(numero) ||
+                    numero <= 0
+                ) {
+                    throw new Error(
+                        'La cantidad debe ser un número entero mayor que cero.'
+                    );
+                }
+
+                return numero;
+            };
+
+            const obtenerCantidades = (nuevosLlenos, nuevosVacios) => {
+
+                const l = Number(nuevosLlenos);
+                const v = Number(nuevosVacios);
+
+                validarCantidad(l, v);
+
+                if (l <= 0 && v <= 0) {
+                    throw new Error(
+                        'Debes registrar al menos un cilindro.'
+                    );
+                }
+
+                return {
+                    llenos: l,
+                    vacios: v
+                };
+            };
+
+            const ubicacionesCliente = [
+                UBICACIONES.ROJO,
+                UBICACIONES.BLANCO,
+                UBICACIONES.CASA
+            ];
+
+            const ubicacionesTraslado = [
+                UBICACIONES.ROJO,
+                UBICACIONES.BLANCO,
+                UBICACIONES.CASA
+            ];
+
+            const normalizarEstado = valor =>
+                String(valor || '').toLowerCase();
+
+            const fechaModificacion =
+                new Date().toISOString();
+
+            const cantidadLlenosOriginal =
+                Number(original.llenos || 0);
+
+            const cantidadVaciosOriginal =
+                Number(original.vacios || 0);
+
+            // =========================================
+            // 3. REVERTIR EL MOVIMIENTO ORIGINAL
+            // =========================================
+
+            switch (original.tipo) {
+
+                case TIPOS_MOVIMIENTO.ENTREGA_CLIENTE: {
+
+                    const camionAnterior =
+                        buscarUbicacion(original.camion_origen);
+
+                    const clienteAnterior =
+                        buscarCliente(original.id_cliente);
+
+                    ajustar(
+                        camionAnterior,
+                        'llenos',
+                        cantidadLlenosOriginal
+                    );
+
+                    ajustarPendiente(
+                        clienteAnterior,
+                        -cantidadLlenosOriginal
+                    );
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.RETIRO_CLIENTE: {
+
+                    const camionAnterior =
+                        buscarUbicacion(original.camion_destino);
+
+                    ajustar(
+                        camionAnterior,
+                        'vacios',
+                        -cantidadVaciosOriginal
+                    );
+
+                    if (!original.retiro_especial) {
+
+                        const clienteAnterior =
+                            buscarCliente(original.id_cliente);
+
+                        ajustarPendiente(
+                            clienteAnterior,
+                            cantidadVaciosOriginal
+                        );
+                    }
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.ENTREGA_RETIRO: {
+
+                    const camionAnterior =
+                        buscarUbicacion(original.camion_origen);
+
+                    const clienteAnterior =
+                        buscarCliente(original.id_cliente);
+
+                    ajustar(
+                        camionAnterior,
+                        'llenos',
+                        cantidadLlenosOriginal
+                    );
+
+                    ajustar(
+                        camionAnterior,
+                        'vacios',
+                        -cantidadVaciosOriginal
+                    );
+
+                    ajustarPendiente(
+                        clienteAnterior,
+                        -cantidadLlenosOriginal + cantidadVaciosOriginal
+                    );
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.TRASLADO: {
+
+                    const anteriorOrigen =
+                        buscarUbicacion(original.camion_origen);
+
+                    const anteriorDestino =
+                        buscarUbicacion(original.camion_destino);
+
+                    ajustar(
+                        anteriorOrigen,
+                        'llenos',
+                        cantidadLlenosOriginal
+                    );
+
+                    ajustar(
+                        anteriorOrigen,
+                        'vacios',
+                        cantidadVaciosOriginal
+                    );
+
+                    ajustar(
+                        anteriorDestino,
+                        'llenos',
+                        -cantidadLlenosOriginal
+                    );
+
+                    ajustar(
+                        anteriorDestino,
+                        'vacios',
+                        -cantidadVaciosOriginal
+                    );
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.CAMBIAZO: {
+
+                    const camionAnterior =
+                        buscarUbicacion(original.camion_origen);
+
+                    const cantidadAnterior =
+                        obtenerCantidad(original.cantidad);
+
+                    const estadoAnterior =
+                        normalizarEstado(original.estado_origen);
+
+                    const estadoNuevoAnterior =
+                        normalizarEstado(original.estado_nuevo);
+
+                    if (
+                        !['llenos', 'vacios'].includes(estadoAnterior) ||
+                        !['llenos', 'vacios'].includes(estadoNuevoAnterior) ||
+                        estadoAnterior === estadoNuevoAnterior
+                    ) {
+                        throw new Error(
+                            'El cambiazo original tiene estados inválidos.'
+                        );
+                    }
+
+                    ajustar(
+                        camionAnterior,
+                        estadoAnterior,
+                        cantidadAnterior
+                    );
+
+                    ajustar(
+                        camionAnterior,
+                        estadoNuevoAnterior,
+                        -cantidadAnterior
+                    );
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.SALIDA_PLANTA: {
+
+                    const camionAnterior =
+                        buscarUbicacion(original.camion_origen);
+
+                    const viaje = viajes.find(
+                        v => v.id_viaje === original.id_viaje
+                    );
+
+                    if (
+                        !viaje ||
+                        viaje.estado !== 'ABIERTO' ||
+                        viaje.id_movimiento_salida !== original.id_movimiento
+                    ) {
+                        throw new Error(
+                            'La salida original no coincide con un viaje abierto válido.'
+                        );
+                    }
+
+                    ajustar(
+                        camionAnterior,
+                        'vacios',
+                        cantidadVaciosOriginal
+                    );
+
+                    viaje.estado = 'ANULADO';
+                    viaje.fecha_regreso = null;
+                    viaje.llenos_recibidos = 0;
+                    viaje.id_movimiento_regreso = null;
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.REGRESO_PLANTA: {
+
+                    const camionAnterior =
+                        buscarUbicacion(original.camion_destino);
+
+                    const viaje = viajes.find(
+                        v => v.id_viaje === original.id_viaje
+                    );
+
+                    if (
+                        !viaje ||
+                        viaje.estado !== 'CERRADO' ||
+                        viaje.id_movimiento_regreso !== original.id_movimiento
+                    ) {
+                        throw new Error(
+                            'El regreso original no coincide con el viaje registrado.'
+                        );
+                    }
+
+                    ajustar(
+                        camionAnterior,
+                        'llenos',
+                        -cantidadLlenosOriginal
+                    );
+
+                    viaje.estado = 'ABIERTO';
+                    viaje.fecha_regreso = null;
+                    viaje.llenos_recibidos = 0;
+                    viaje.id_movimiento_regreso = null;
+
+                    break;
+                }
+
+                default:
+
+                    throw new Error(
+                        `No se puede editar este tipo de movimiento: ${original.tipo}`
+                    );
+            }
+
+            // =========================================
+            // 4. PREPARAR EL MISMO MOVIMIENTO
+            // =========================================
+
+            const actualizado = {
+                ...original,
+                observacion: String(observacion || '').trim(),
+                modificado_at: fechaModificacion,
+                sync_estado: 'PENDIENTE',
+                estado: 'ACTIVO'
+            };
+
+            // =========================================
+            // 5. APLICAR LOS NUEVOS DATOS
+            // =========================================
+
+            switch (original.tipo) {
+
+                case TIPOS_MOVIMIENTO.ENTREGA_CLIENTE: {
+
+                    const nuevaCantidad =
+                        obtenerCantidad(cantidad);
+
+                    if (!ubicacionesCliente.includes(camion)) {
+                        throw new Error(
+                            'Selecciona una ubicación válida.'
+                        );
+                    }
+
+                    const nuevoCliente =
+                        buscarClienteActivo(idCliente);
+
+                    const nuevoCamion =
+                        buscarUbicacion(camion);
+
+                    ajustar(
+                        nuevoCamion,
+                        'llenos',
+                        -nuevaCantidad
+                    );
+
+                    ajustarPendiente(
+                        nuevoCliente,
+                        nuevaCantidad
+                    );
+
+                    actualizado.id_cliente = idCliente;
+                    actualizado.camion_origen = camion;
+                    actualizado.camion_destino = null;
+                    actualizado.llenos = nuevaCantidad;
+                    actualizado.vacios = 0;
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.RETIRO_CLIENTE: {
+
+                    const nuevaCantidad =
+                        obtenerCantidad(cantidad);
+
+                    if (!ubicacionesCliente.includes(camion)) {
+                        throw new Error(
+                            'Selecciona una ubicación válida.'
+                        );
+                    }
+
+                    const nuevoCliente =
+                        buscarClienteActivo(idCliente);
+
+                    const especial =
+                        Boolean(retiroEspecial);
+
+                    const nuevaObservacion =
+                        String(observacion || '').trim();
+
+                    if (especial && !nuevaObservacion) {
+                        throw new Error(
+                            'La observación es obligatoria para un retiro especial.'
+                        );
+                    }
+
+                    const nuevoCamion =
+                        buscarUbicacion(camion);
+
+                    ajustar(
+                        nuevoCamion,
+                        'vacios',
+                        nuevaCantidad
+                    );
+
+                    if (!especial) {
+                        ajustarPendiente(
+                            nuevoCliente,
+                            -nuevaCantidad
+                        );
+                    }
+
+                    actualizado.id_cliente = idCliente;
+                    actualizado.camion_origen = null;
+                    actualizado.camion_destino = camion;
+                    actualizado.llenos = 0;
+                    actualizado.vacios = nuevaCantidad;
+                    actualizado.retiro_especial = especial;
+
+                    actualizado.observacion = especial
+                        ? `[RETIRO ESPECIAL] ${nuevaObservacion}`
+                        : nuevaObservacion;
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.ENTREGA_RETIRO: {
+
+                    const cantidades =
+                        obtenerCantidades(llenos, vacios);
+
+                    if (!ubicacionesCliente.includes(camion)) {
+                        throw new Error(
+                            'Selecciona una ubicación válida.'
+                        );
+                    }
+
+                    const nuevoCliente =
+                        buscarClienteActivo(idCliente);
+
+                    const nuevoCamion =
+                        buscarUbicacion(camion);
+
+                    ajustar(
+                        nuevoCamion,
+                        'llenos',
+                        -cantidades.llenos
+                    );
+
+                    ajustar(
+                        nuevoCamion,
+                        'vacios',
+                        cantidades.vacios
+                    );
+
+                    ajustarPendiente(
+                        nuevoCliente,
+                        cantidades.llenos - cantidades.vacios
+                    );
+
+                    actualizado.id_cliente = idCliente;
+                    actualizado.camion_origen = camion;
+                    actualizado.camion_destino = camion;
+                    actualizado.llenos = cantidades.llenos;
+                    actualizado.vacios = cantidades.vacios;
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.TRASLADO: {
+
+                    const cantidades =
+                        obtenerCantidades(llenos, vacios);
+
+                    if (
+                        !ubicacionesTraslado.includes(origen) ||
+                        !ubicacionesTraslado.includes(destino) ||
+                        origen === destino
+                    ) {
+                        throw new Error(
+                            'Selecciona dos ubicaciones diferentes y válidas.'
+                        );
+                    }
+
+                    const nuevoOrigen =
+                        buscarUbicacion(origen);
+
+                    const nuevoDestino =
+                        buscarUbicacion(destino);
+
+                    ajustar(
+                        nuevoOrigen,
+                        'llenos',
+                        -cantidades.llenos
+                    );
+
+                    ajustar(
+                        nuevoOrigen,
+                        'vacios',
+                        -cantidades.vacios
+                    );
+
+                    ajustar(
+                        nuevoDestino,
+                        'llenos',
+                        cantidades.llenos
+                    );
+
+                    ajustar(
+                        nuevoDestino,
+                        'vacios',
+                        cantidades.vacios
+                    );
+
+                    actualizado.camion_origen = origen;
+                    actualizado.camion_destino = destino;
+                    actualizado.llenos = cantidades.llenos;
+                    actualizado.vacios = cantidades.vacios;
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.CAMBIAZO: {
+
+                    const nuevaCantidad =
+                        obtenerCantidad(cantidad);
+
+                    const nuevoEstadoActual =
+                        normalizarEstado(estadoActual);
+
+                    const nuevoEstadoFinal =
+                        normalizarEstado(estadoNuevo);
+
+                    if (
+                        ![UBICACIONES.ROJO, UBICACIONES.BLANCO].includes(ubicacion)
+                    ) {
+                        throw new Error(
+                            'El cambiazo solo se permite en ROJO o BLANCO.'
+                        );
+                    }
+
+                    if (
+                        !['llenos', 'vacios'].includes(nuevoEstadoActual) ||
+                        !['llenos', 'vacios'].includes(nuevoEstadoFinal) ||
+                        nuevoEstadoActual === nuevoEstadoFinal
+                    ) {
+                        throw new Error(
+                            'Selecciona estados de cilindro diferentes.'
+                        );
+                    }
+
+                    const nuevaObservacion =
+                        String(observacion || '').trim();
+
+                    if (!nuevaObservacion) {
+                        throw new Error(
+                            'Debes ingresar el motivo del cambiazo.'
+                        );
+                    }
+
+                    const camionNuevo =
+                        buscarUbicacion(ubicacion);
+
+                    ajustar(
+                        camionNuevo,
+                        nuevoEstadoActual,
+                        -nuevaCantidad
+                    );
+
+                    ajustar(
+                        camionNuevo,
+                        nuevoEstadoFinal,
+                        nuevaCantidad
+                    );
+
+                    actualizado.camion_origen = ubicacion;
+                    actualizado.camion_destino = ubicacion;
+                    actualizado.estado_origen = nuevoEstadoActual;
+                    actualizado.estado_nuevo = nuevoEstadoFinal;
+                    actualizado.cantidad = nuevaCantidad;
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.SALIDA_PLANTA: {
+
+                    const nuevaCantidad =
+                        obtenerCantidad(cantidad);
+
+                    if (
+                        ![UBICACIONES.ROJO, UBICACIONES.BLANCO].includes(camion)
+                    ) {
+                        throw new Error(
+                            'Selecciona ROJO o BLANCO.'
+                        );
+                    }
+
+                    const camionNuevo =
+                        buscarUbicacion(camion);
+
+                    const viaje = viajes.find(
+                        v => v.id_viaje === original.id_viaje
+                    );
+
+                    if (!viaje) {
+                        throw new Error(
+                            'No se encontró el viaje original de planta.'
+                        );
+                    }
+
+                    ajustar(
+                        camionNuevo,
+                        'vacios',
+                        -nuevaCantidad
+                    );
+
+                    viaje.camion = camion;
+                    viaje.fecha_salida = original.fecha_hora;
+                    viaje.fecha_regreso = null;
+                    viaje.estado = 'ABIERTO';
+                    viaje.vacios_enviados = nuevaCantidad;
+                    viaje.llenos_recibidos = 0;
+                    viaje.id_movimiento_salida = original.id_movimiento;
+                    viaje.id_movimiento_regreso = null;
+
+                    actualizado.camion_origen = camion;
+                    actualizado.camion_destino = null;
+                    actualizado.llenos = 0;
+                    actualizado.vacios = nuevaCantidad;
+
+                    break;
+                }
+
+                case TIPOS_MOVIMIENTO.REGRESO_PLANTA: {
+
+                    const viaje = viajes.find(
+                        v => v.id_viaje === original.id_viaje
+                    );
+
+                    if (
+                        !viaje ||
+                        viaje.estado !== 'ABIERTO' ||
+                        viaje.id_movimiento_salida == null
+                    ) {
+                        throw new Error(
+                            'No se puede modificar el viaje de planta.'
+                        );
+                    }
+
+                    const nuevaCantidad =
+                        obtenerCantidad(cantidad ?? llenos);
+
+                    if (
+                        nuevaCantidad !== Number(viaje.vacios_enviados)
+                    ) {
+                        throw new Error(
+                            `El regreso debe coincidir con los ${viaje.vacios_enviados} cilindros enviados.`
+                        );
+                    }
+
+                    const camionNuevo =
+                        buscarUbicacion(viaje.camion);
+
+                    ajustar(
+                        camionNuevo,
+                        'llenos',
+                        nuevaCantidad
+                    );
+
+                    viaje.estado = 'CERRADO';
+                    viaje.fecha_regreso = fechaModificacion;
+                    viaje.llenos_recibidos = nuevaCantidad;
+                    viaje.id_movimiento_regreso = original.id_movimiento;
+
+                    actualizado.camion_origen = null;
+                    actualizado.camion_destino = viaje.camion;
+                    actualizado.llenos = nuevaCantidad;
+                    actualizado.vacios = 0;
+
+                    break;
+                }
+            }
+
+            // =========================================
+            // 6. ACTUALIZAR PENDIENTES GENERALES
+            // =========================================
 
             const inventarioClientes = inventario.find(
                 i => i.ubicacion === UBICACIONES.CLIENTES
             );
 
+            if (
+                original.tipo === TIPOS_MOVIMIENTO.ENTREGA_CLIENTE ||
+                original.tipo === TIPOS_MOVIMIENTO.RETIRO_CLIENTE ||
+                original.tipo === TIPOS_MOVIMIENTO.ENTREGA_RETIRO
+            ) {
+
+                if (!inventarioClientes) {
+                    throw new Error(
+                        'No existe el inventario agregado de clientes.'
+                    );
+                }
+            }
+
             if (inventarioClientes) {
+
                 inventarioClientes.pendientes = clientes
                     .filter(c => c.estado === 'ACTIVO')
                     .reduce(
-                        (total, c) => total + Number(c.pendientes_actuales || 0),
+                        (total, c) =>
+                            total + Number(c.pendientes_actuales || 0),
                         0
                     );
             }
 
-            const actualizado = {
-                ...original,
-                id_cliente: idCliente,
-                camion_origen: camion,
-                llenos: cantidad,
-                vacios: 0,
-                observacion,
-                fecha_hora: new Date().toISOString(),
-                modificado_at: new Date().toISOString(),
-                sync_estado: 'PENDIENTE'
-            };
+            // =========================================
+            // 7. GUARDAR EL MISMO MOVIMIENTO
+            // =========================================
 
             return {
                 resultado: actualizado,
+
                 puts: {
                     inventario,
                     clientes,
-                    movimientos: [actualizado]
+                    movimientos: [actualizado],
+                    viajes_planta: viajes
                 }
             };
         }
     );
 }
+
+
 /* =====================================================
    OBTENER VIAJES ABIERTOS
 ===================================================== */

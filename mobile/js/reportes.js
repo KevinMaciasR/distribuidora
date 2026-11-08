@@ -21,30 +21,36 @@ export async function obtenerInventarioReporte() {
 
     const rojo = buscar('ROJO');
     const blanco = buscar('BLANCO');
+    const casa = buscar('CASA');
     const clientes = buscar('CLIENTES');
     const sinAsignar = buscar('SIN ASIGNAR');
 
     const inventario = {
-        rojoLlenos: Number(rojo.llenos) || 0,
-        rojoVacios: Number(rojo.vacios) || 0,
+    rojoLlenos: Number(rojo.llenos) || 0,
+    rojoVacios: Number(rojo.vacios) || 0,
 
-        blancoLlenos: Number(blanco.llenos) || 0,
-        blancoVacios: Number(blanco.vacios) || 0,
+    blancoLlenos: Number(blanco.llenos) || 0,
+    blancoVacios: Number(blanco.vacios) || 0,
 
-        pendientesClientes: Number(clientes.pendientes) || 0,
+    casaLlenos: Number(casa.llenos) || 0,
+    casaVacios: Number(casa.vacios) || 0,
 
-        sinAsignarLlenos: Number(sinAsignar.llenos) || 0,
-        sinAsignarVacios: Number(sinAsignar.vacios) || 0
-    };
+    pendientesClientes: Number(clientes.pendientes) || 0,
 
-    inventario.total =
-        inventario.rojoLlenos +
-        inventario.rojoVacios +
-        inventario.blancoLlenos +
-        inventario.blancoVacios +
-        inventario.pendientesClientes +
-        inventario.sinAsignarLlenos +
-        inventario.sinAsignarVacios;
+    sinAsignarLlenos: Number(sinAsignar.llenos) || 0,
+    sinAsignarVacios: Number(sinAsignar.vacios) || 0
+};
+
+   inventario.total =
+    inventario.rojoLlenos +
+    inventario.rojoVacios +
+    inventario.blancoLlenos +
+    inventario.blancoVacios +
+    inventario.casaLlenos +
+    inventario.casaVacios +
+    inventario.pendientesClientes +
+    inventario.sinAsignarLlenos +
+    inventario.sinAsignarVacios;
 
     return inventario;
 }

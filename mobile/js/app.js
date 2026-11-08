@@ -19,7 +19,7 @@ import {
     obtenerMovimientos,
     obtenerViajesAbiertos,
     anularUltimoMovimiento,
-    editarUltimaEntregaCliente,
+    editarUltimoMovimiento,
     cambiazo
 } from './movimientos.js';
 
@@ -140,10 +140,13 @@ async function renderInicio() {
 
     const vaciosDisponibles =
         (inventario.rojo?.vacios || 0) +
-        (inventario.blanco?.vacios || 0);
+        (inventario.blanco?.vacios || 0) +
+        (inventario.casa?.vacios || 0);
+
     const llenosDisponibles =
         (inventario.rojo?.llenos || 0) +
-        (inventario.blanco?.llenos || 0);
+        (inventario.blanco?.llenos || 0) +
+        (inventario.casa?.llenos || 0);
 
     const estadoSync =
         sync.total === 0
@@ -200,24 +203,9 @@ async function renderInicio() {
         <header class="app-header">
 
             <h1>DISTRIBUIDORA</h1>
-
-            <p>
-                Control de cilindros
-            </p>
-
         </header>
 
-
         <main class="main-content">
-
-
-            <!-- =====================================
-                 SINCRONIZACIÓN
-            ====================================== -->
-
-            ${estadoSync}
-
-
             <!-- =====================================
                  RESUMEN DE HOY
             ====================================== -->
@@ -231,11 +219,6 @@ async function renderInicio() {
                         <div class="section-title">
                             📊 RESUMEN DE HOY
                         </div>
-
-                        <div class="section-subtitle">
-                            Resumen de la operación del día
-                        </div>
-
                     </div>
 
                 </div>
@@ -255,7 +238,6 @@ async function renderInicio() {
                         </strong>
 
                     </div>
-
 
                     <div class="summary-card">
 
@@ -354,7 +336,34 @@ async function renderInicio() {
                         </strong>
 
                     </div>
+<!-- CASA LLENOS -->
 
+<div class="inventory-item">
+
+    <span class="label">
+        🏠 Casa — Llenos
+    </span>
+
+    <strong class="number">
+        ${inventario.casa?.llenos || 0}
+    </strong>
+
+</div>
+
+
+<!-- CASA VACÍOS -->
+
+<div class="inventory-item">
+
+    <span class="label">
+        🏠 Casa — Vacíos
+    </span>
+
+    <strong class="number">
+        ${inventario.casa?.vacios || 0}
+    </strong>
+
+</div>
 
                     <!-- CLIENTES -->
 
@@ -607,6 +616,10 @@ ${tarjetasViajes}
 
             </section>
 
+            <!-- =====================================
+                 SINCRONIZACIÓN
+            ====================================== -->
+            ${estadoSync}
 
         </main>
 
@@ -649,7 +662,7 @@ ${tarjetasViajes}
         ?.addEventListener(
             'click',
             async () => {
-alert('PUNTO 1: SE PRESIONÓ EL BOTÓN EXPORTAR BD');
+                alert('PUNTO 1: SE PRESIONÓ EL BOTÓN EXPORTAR BD');
                 try {
 
                     const nombre =
@@ -999,10 +1012,19 @@ async function renderMovimientos() {
                 m.estado === 'ACTIVO' &&
                 m.sync_estado === 'PENDIENTE';
 
-            const puedeEditarEntrega =
-                puedeGestionar &&
-                m.tipo === 'ENTREGA A CLIENTE';
+const TIPOS_EDITABLES = [
+    'ENTREGA A CLIENTE',
+    'RETIRO DE CLIENTE',
+    'ENTREGA + RETIRO',
+    'SALIDA A PLANTA',
+    'REGRESO DE PLANTA',
+    'TRASLADO ENTRE CAMIONES',
+    'CAMBIAZO'
+];
 
+const puedeEditar =
+    puedeGestionar &&
+    TIPOS_EDITABLES.includes(m.tipo);
             return `
                         <div class="list-item">
 
@@ -1037,7 +1059,7 @@ async function renderMovimientos() {
                             ${puedeGestionar ? `
                                 <div class="acciones-movimiento">
 
-                                    ${puedeEditarEntrega ? `
+                                    ${puedeEditar ? `
                                         <button
                                             type="button"
                                             class="btn-accion btn-editar"
@@ -1257,7 +1279,6 @@ function mostrarTiposMovimiento() {
         );
 }
 
-
 function botonMovimiento(
     icon,
     titulo,
@@ -1291,7 +1312,6 @@ function botonMovimiento(
         </button>
     `;
 }
-
 
 /* =====================================================
    FORMULARIOS
@@ -1333,6 +1353,7 @@ async function abrirFormularioMovimiento(tipo, movimientoEditar = null) {
             throw new Error('Tipo de movimiento no reconocido.');
     }
 }
+
 /* =====================================================
    ENTREGA A CLIENTE
 ===================================================== */
@@ -1340,7 +1361,6 @@ async function abrirFormularioMovimiento(tipo, movimientoEditar = null) {
 async function formularioEntrega(movimientoEditar = null) {
 
     const clientes = await obtenerClientes();
-
     const modoEdicion = Boolean(movimientoEditar);
 
     app.innerHTML = `
@@ -1360,13 +1380,10 @@ async function formularioEntrega(movimientoEditar = null) {
                 <div class="form-group">
                     <label>Camión</label>
 
-                    <select
-                        class="form-control"
-                        name="camion"
-                        required
-                    >
+                    <select class="form-control" name="camion" required>
                         <option value="ROJO">Camión Rojo</option>
                         <option value="BLANCO">Camión Blanco</option>
+                        <option value="CASA">Casa</option>
                     </select>
                 </div>
 
@@ -1402,8 +1419,8 @@ async function formularioEntrega(movimientoEditar = null) {
 
     const formulario = document.getElementById('formMovimiento');
 
-    // Cargar los datos originales cuando se edita.
     if (modoEdicion) {
+
         formulario.elements.namedItem('idCliente').value =
             movimientoEditar.id_cliente;
 
@@ -1433,24 +1450,29 @@ async function formularioEntrega(movimientoEditar = null) {
 
         try {
 
+            const datos = {
+    tipo: TIPOS_MOVIMIENTO.ENTREGA_CLIENTE,
+    idMovimiento: modoEdicion
+        ? movimientoEditar.id_movimiento
+        : null,
+    idCliente: form.get('idCliente'),
+    camion: form.get('camion'),
+    cantidad: form.get('llenos'),
+    observacion: form.get('observacion')
+};
+
             if (modoEdicion) {
 
-                await editarUltimaEntregaCliente({
-                    idCliente: form.get('idCliente'),
-                    camion: form.get('camion'),
-                    cantidad: form.get('llenos'),
-                    observacion: form.get('observacion')
-                });
-
+                await editarUltimoMovimiento(datos);
                 mostrarExito('ENTREGA MODIFICADA');
 
             } else {
 
                 await entregaCliente({
-                    idCliente: form.get('idCliente'),
-                    camion: form.get('camion'),
-                    cantidad: form.get('llenos'),
-                    observacion: form.get('observacion')
+                    idCliente: datos.idCliente,
+                    camion: datos.camion,
+                    cantidad: datos.cantidad,
+                    observacion: datos.observacion
                 });
 
                 mostrarExito('ENTREGA REGISTRADA');
@@ -1467,62 +1489,41 @@ async function formularioEntrega(movimientoEditar = null) {
     });
 }
 
-
 /* =====================================================
-   RETIRO
+   RETIRO DE CLIENTE
 ===================================================== */
 
-async function formularioRetiro() {
+async function formularioRetiro(movimientoEditar = null) {
 
-    const clientes =
-        await obtenerClientes();
-
+    const clientes = await obtenerClientes();
+    const modoEdicion = Boolean(movimientoEditar);
 
     app.innerHTML = `
 
         ${cabeceraFormulario(
-        '↩️ RETIRO DE CLIENTE'
+        modoEdicion
+            ? '✏️ EDITAR RETIRO DE CLIENTE'
+            : '↩️ RETIRO DE CLIENTE'
     )}
-
 
         <main class="main-content">
 
             <form id="formMovimiento">
 
-
                 ${selectClientes(clientes)}
 
-
                 <div class="form-group">
+                    <label>Camión que recibe</label>
 
-                    <label>
-                        Camión que recibe
-                    </label>
-
-                    <select
-                        class="form-control"
-                        name="camion"
-                        required
-                    >
-
-                        <option value="ROJO">
-                            Camión Rojo
-                        </option>
-
-                        <option value="BLANCO">
-                            Camión Blanco
-                        </option>
-
+                    <select class="form-control" name="camion" required>
+                        <option value="ROJO">Camión Rojo</option>
+                        <option value="BLANCO">Camión Blanco</option>
+                        <option value="CASA">Casa</option>
                     </select>
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Cilindros vacíos retirados
-                    </label>
+                    <label>Cilindros vacíos retirados</label>
 
                     <input
                         class="form-control"
@@ -1532,30 +1533,21 @@ async function formularioRetiro() {
                         step="1"
                         required
                     >
-
                 </div>
 
-
                 <div class="form-group">
-
                     <label>
                         <input
                             type="checkbox"
                             name="retiroEspecial"
                             id="retiroEspecial"
                         >
-
                         Retiro especial — saldo no registrado
                     </label>
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Observación
-                    </label>
+                    <label>Observación</label>
 
                     <textarea
                         class="form-control"
@@ -1563,9 +1555,7 @@ async function formularioRetiro() {
                         id="observacionRetiro"
                         placeholder="Opcional"
                     ></textarea>
-
                 </div>
-
 
                 ${botonesFormulario()}
 
@@ -1574,145 +1564,148 @@ async function formularioRetiro() {
         </main>
     `;
 
-
-    conectarCancelar();
-
+    const formulario = document.getElementById('formMovimiento');
 
     const checkboxEspecial =
-        document.getElementById(
-            'retiroEspecial'
-        );
+        document.getElementById('retiroEspecial');
 
     const campoObservacion =
-        document.getElementById(
-            'observacionRetiro'
-        );
+        document.getElementById('observacionRetiro');
 
+    if (modoEdicion) {
+
+        formulario.elements.namedItem('idCliente').value =
+            movimientoEditar.id_cliente;
+
+        formulario.elements.namedItem('camion').value =
+            movimientoEditar.camion_destino;
+
+        formulario.elements.namedItem('vacios').value =
+            movimientoEditar.vacios;
+
+        checkboxEspecial.checked =
+            Boolean(movimientoEditar.retiro_especial);
+
+        campoObservacion.value =
+            (movimientoEditar.observacion || '')
+                .replace(/^\[RETIRO ESPECIAL\]\s*/i, '');
+    }
+
+    function actualizarCampoObservacion() {
+
+        if (checkboxEspecial.checked) {
+
+            campoObservacion.required = true;
+
+            campoObservacion.placeholder =
+                'Obligatoria: explica por qué este saldo no estaba registrado.';
+
+        } else {
+
+            campoObservacion.required = false;
+            campoObservacion.placeholder = 'Opcional';
+        }
+    }
 
     checkboxEspecial.addEventListener(
         'change',
-        () => {
+        actualizarCampoObservacion
+    );
 
-            if (checkboxEspecial.checked) {
+    actualizarCampoObservacion();
 
-                campoObservacion.required = true;
+    conectarCancelar();
 
-                campoObservacion.placeholder =
-                    'Obligatoria: explica por qué este saldo no estaba registrado.';
+    formulario.addEventListener('submit', async event => {
+
+        event.preventDefault();
+
+        const botonEnviar = event.submitter;
+
+        if (botonEnviar) {
+            botonEnviar.disabled = true;
+        }
+
+        const form = new FormData(formulario);
+
+        try {
+
+            const datos = {
+    tipo: TIPOS_MOVIMIENTO.RETIRO_CLIENTE,
+    idMovimiento: modoEdicion
+        ? movimientoEditar.id_movimiento
+        : null,
+    idCliente: form.get('idCliente'),
+    camion: form.get('camion'),
+    cantidad: form.get('vacios'),
+    observacion: form.get('observacion'),
+    retiroEspecial: checkboxEspecial.checked
+};
+
+            if (modoEdicion) {
+
+                await editarUltimoMovimiento(datos);
+                mostrarExito('RETIRO MODIFICADO');
 
             } else {
 
-                campoObservacion.required = false;
+                await retiroCliente({
+                    idCliente: datos.idCliente,
+                    camion: datos.camion,
+                    cantidad: datos.cantidad,
+                    observacion: datos.observacion,
+                    retiroEspecial: datos.retiroEspecial
+                });
 
-                campoObservacion.placeholder =
-                    'Opcional';
+                mostrarExito('RETIRO REGISTRADO');
+            }
+
+        } catch (error) {
+
+            mostrarError(error.message);
+
+            if (botonEnviar) {
+                botonEnviar.disabled = false;
             }
         }
-    );
-
-
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
-
-                event.preventDefault();
-
-                const form =
-                    new FormData(event.target);
-
-                try {
-
-                    await retiroCliente({
-
-                        idCliente:
-                            form.get('idCliente'),
-
-                        camion:
-                            form.get('camion'),
-
-                        cantidad:
-                            form.get('vacios'),
-
-                        observacion:
-                            form.get('observacion'),
-
-                        retiroEspecial:
-                            form.get('retiroEspecial') === 'on'
-
-                    });
-
-
-                    mostrarExito(
-                        'RETIRO REGISTRADO'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
-            }
-        );
+    });
 }
 
 /* =====================================================
    ENTREGA + RETIRO
 ===================================================== */
 
-async function formularioEntregaRetiro() {
+async function formularioEntregaRetiro(movimientoEditar = null) {
 
-    const clientes =
-        await obtenerClientes();
-
+    const clientes = await obtenerClientes();
+    const modoEdicion = Boolean(movimientoEditar);
 
     app.innerHTML = `
 
         ${cabeceraFormulario(
-        '⇄ ENTREGA + RETIRO'
+        modoEdicion
+            ? '✏️ EDITAR ENTREGA + RETIRO'
+            : '⇄ ENTREGA + RETIRO'
     )}
-
 
         <main class="main-content">
 
             <form id="formMovimiento">
 
-
                 ${selectClientes(clientes)}
 
-
                 <div class="form-group">
+                    <label>Camión</label>
 
-                    <label>
-                        Camión
-                    </label>
-
-                    <select
-                        class="form-control"
-                        name="camion"
-                        required
-                    >
-
-                        <option value="ROJO">
-                            Camión Rojo
-                        </option>
-
-                        <option value="BLANCO">
-                            Camión Blanco
-                        </option>
-
+                    <select class="form-control" name="camion" required>
+                        <option value="ROJO">Camión Rojo</option>
+                        <option value="BLANCO">Camión Blanco</option>
+                        <option value="CASA">Casa</option>
                     </select>
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Cilindros llenos entregados
-                    </label>
+                    <label>Cilindros llenos entregados</label>
 
                     <input
                         class="form-control"
@@ -1723,15 +1716,10 @@ async function formularioEntregaRetiro() {
                         value="0"
                         required
                     >
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Cilindros vacíos recibidos
-                    </label>
+                    <label>Cilindros vacíos recibidos</label>
 
                     <input
                         class="form-control"
@@ -1742,32 +1730,21 @@ async function formularioEntregaRetiro() {
                         value="0"
                         required
                     >
-
                 </div>
 
-
-                <div
-                    class="status-bar status-info"
-                    id="previewPendiente"
-                >
-                    Pendientes del cliente: — 
+                <div class="status-bar status-info" id="previewPendiente">
+                    Pendientes del cliente: —
                 </div>
-
 
                 <div class="form-group">
-
-                    <label>
-                        Observación
-                    </label>
+                    <label>Observación</label>
 
                     <textarea
                         class="form-control"
                         name="observacion"
                         placeholder="Opcional"
                     ></textarea>
-
                 </div>
-
 
                 ${botonesFormulario()}
 
@@ -1776,169 +1753,152 @@ async function formularioEntregaRetiro() {
         </main>
     `;
 
-
-    conectarCancelar();
-
+    const formulario = document.getElementById('formMovimiento');
 
     const selectCliente =
-        document.querySelector(
-            '[name="idCliente"]'
-        );
+        formulario.elements.namedItem('idCliente');
 
     const inputLlenos =
-        document.querySelector(
-            '[name="llenos"]'
-        );
+        formulario.elements.namedItem('llenos');
 
     const inputVacios =
-        document.querySelector(
-            '[name="vacios"]'
-        );
+        formulario.elements.namedItem('vacios');
+
+    const preview =
+        document.getElementById('previewPendiente');
+
+    if (modoEdicion) {
+
+        selectCliente.value = movimientoEditar.id_cliente;
+
+        formulario.elements.namedItem('camion').value =
+            movimientoEditar.camion_origen;
+
+        inputLlenos.value = movimientoEditar.llenos;
+        inputVacios.value = movimientoEditar.vacios;
+
+        formulario.elements.namedItem('observacion').value =
+            movimientoEditar.observacion || '';
+    }
 
     async function actualizarPreview() {
 
-        const cliente =
-            await obtener(
-                'clientes',
-                selectCliente.value
-            );
+        const cliente = await obtener(
+            'clientes',
+            selectCliente.value
+        );
 
         if (!cliente) {
+            preview.textContent = 'Pendientes del cliente: —';
             return;
         }
 
-        const llenos =
-            Number(inputLlenos.value) || 0;
-
-        const vacios =
-            Number(inputVacios.value) || 0;
+        const llenos = Number(inputLlenos.value) || 0;
+        const vacios = Number(inputVacios.value) || 0;
 
         const resultado =
-            (cliente.pendientes_actuales || 0)
+            (Number(cliente.pendientes_actuales) || 0)
             + llenos
             - vacios;
 
-        document
-            .getElementById(
-                'previewPendiente'
-            )
-            .textContent =
+        preview.textContent =
             `Pendientes después: ${resultado}`;
     }
 
+    selectCliente.addEventListener('change', actualizarPreview);
+    inputLlenos.addEventListener('input', actualizarPreview);
+    inputVacios.addEventListener('input', actualizarPreview);
 
-    selectCliente.addEventListener(
-        'change',
-        actualizarPreview
-    );
+    conectarCancelar();
 
-    inputLlenos.addEventListener(
-        'input',
-        actualizarPreview
-    );
+    await actualizarPreview();
 
-    inputVacios.addEventListener(
-        'input',
-        actualizarPreview
-    );
+    formulario.addEventListener('submit', async event => {
 
+        event.preventDefault();
 
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
+        const botonEnviar = event.submitter;
 
-                event.preventDefault();
+        if (botonEnviar) {
+            botonEnviar.disabled = true;
+        }
 
-                const form =
-                    new FormData(event.target);
+        const form = new FormData(formulario);
 
-                try {
+        try {
 
-                    await entregaRetiro({
+            const datos = {
+    tipo: TIPOS_MOVIMIENTO.ENTREGA_RETIRO,
+    idMovimiento: modoEdicion
+        ? movimientoEditar.id_movimiento
+        : null,
+    idCliente: form.get('idCliente'),
+    camion: form.get('camion'),
+    llenos: form.get('llenos'),
+    vacios: form.get('vacios'),
+    observacion: form.get('observacion')
+};
 
-                        idCliente:
-                            form.get('idCliente'),
+            if (modoEdicion) {
 
-                        camion:
-                            form.get('camion'),
+                await editarUltimoMovimiento(datos);
+                mostrarExito('ENTREGA + RETIRO MODIFICADO');
 
-                        llenos:
-                            form.get('llenos'),
+            } else {
 
-                        vacios:
-                            form.get('vacios'),
+                await entregaRetiro({
+                    idCliente: datos.idCliente,
+                    camion: datos.camion,
+                    llenos: datos.llenos,
+                    vacios: datos.vacios,
+                    observacion: datos.observacion
+                });
 
-                        observacion:
-                            form.get('observacion')
-
-                    });
-
-
-                    mostrarExito(
-                        'ENTREGA + RETIRO REGISTRADO'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
+                mostrarExito('ENTREGA + RETIRO REGISTRADO');
             }
-        );
-}
 
+        } catch (error) {
+
+            mostrarError(error.message);
+
+            if (botonEnviar) {
+                botonEnviar.disabled = false;
+            }
+        }
+    });
+}
 
 /* =====================================================
    SALIDA A PLANTA
 ===================================================== */
 
-async function formularioSalidaPlanta() {
+async function formularioSalidaPlanta(movimientoEditar = null) {
+
+    const modoEdicion = Boolean(movimientoEditar);
 
     app.innerHTML = `
 
         ${cabeceraFormulario(
-        '🏭 SALIDA A PLANTA'
+        modoEdicion
+            ? '✏️ EDITAR SALIDA A PLANTA'
+            : '🏭 SALIDA A PLANTA'
     )}
-
 
         <main class="main-content">
 
             <form id="formMovimiento">
 
-
                 <div class="form-group">
+                    <label>Camión</label>
 
-                    <label>
-                        Camión
-                    </label>
-
-                    <select
-                        class="form-control"
-                        name="camion"
-                        required
-                    >
-
-                        <option value="ROJO">
-                            Camión Rojo
-                        </option>
-
-                        <option value="BLANCO">
-                            Camión Blanco
-                        </option>
-
+                    <select class="form-control" name="camion" required>
+                        <option value="ROJO">Camión Rojo</option>
+                        <option value="BLANCO">Camión Blanco</option>
                     </select>
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Cilindros vacíos enviados
-                    </label>
+                    <label>Cilindros vacíos enviados</label>
 
                     <input
                         class="form-control"
@@ -1948,24 +1908,17 @@ async function formularioSalidaPlanta() {
                         step="1"
                         required
                     >
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Observación
-                    </label>
+                    <label>Observación</label>
 
                     <textarea
                         class="form-control"
                         name="observacion"
                         placeholder="Opcional"
                     ></textarea>
-
                 </div>
-
 
                 ${botonesFormulario()}
 
@@ -1974,128 +1927,154 @@ async function formularioSalidaPlanta() {
         </main>
     `;
 
+    const formulario = document.getElementById('formMovimiento');
+
+    if (modoEdicion) {
+
+        formulario.elements.namedItem('camion').value =
+            movimientoEditar.camion_origen;
+
+        formulario.elements.namedItem('vacios').value =
+            movimientoEditar.vacios;
+
+        formulario.elements.namedItem('observacion').value =
+            movimientoEditar.observacion || '';
+    }
 
     conectarCancelar();
 
+    formulario.addEventListener('submit', async event => {
 
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
+        event.preventDefault();
 
-                event.preventDefault();
+        const botonEnviar = event.submitter;
 
-                const form =
-                    new FormData(event.target);
+        if (botonEnviar) {
+            botonEnviar.disabled = true;
+        }
 
-                try {
+        const form = new FormData(formulario);
 
+        try {
 
-                    await salidaPlanta({
+            const datos = {
+                tipo: TIPOS_MOVIMIENTO.SALIDA_PLANTA,
+                idMovimiento: modoEdicion
+                    ? movimientoEditar.id_movimiento
+                    : null,
+                camion: form.get('camion'),
+                cantidad: form.get('vacios'),
+                observacion: form.get('observacion')
+            };
 
-                        camion:
-                            form.get('camion'),
+            if (modoEdicion) {
 
-                        cantidad:
-                            form.get('vacios'),
+                await editarUltimoMovimiento(datos);
+                mostrarExito('SALIDA A PLANTA MODIFICADA');
 
-                        observacion:
-                            form.get('observacion')
+            } else {
 
-                    });
+                await salidaPlanta({
+                    camion: datos.camion,
+                    cantidad: datos.cantidad,
+                    observacion: datos.observacion
+                });
 
-
-                    mostrarExito(
-                        'SALIDA A PLANTA REGISTRADA'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
+                mostrarExito('SALIDA A PLANTA REGISTRADA');
             }
-        );
-}
 
+        } catch (error) {
+
+            mostrarError(error.message);
+
+            if (botonEnviar) {
+                botonEnviar.disabled = false;
+            }
+        }
+    });
+}
 
 /* =====================================================
    REGRESO DE PLANTA
 ===================================================== */
 
-async function formularioRegresoPlanta() {
 
-    const viajes =
-        await obtenerViajesAbiertos();
+async function formularioRegresoPlanta(movimientoEditar = null) {
 
+    const viajes = await obtenerViajesAbiertos();
+    const modoEdicion = Boolean(movimientoEditar);
+
+    let opcionesViajes = [...viajes];
+
+    if (modoEdicion && movimientoEditar.id_viaje) {
+
+        const existe = opcionesViajes.some(
+            viaje => viaje.id_viaje === movimientoEditar.id_viaje
+        );
+
+        if (!existe) {
+
+            opcionesViajes.push({
+                id_viaje: movimientoEditar.id_viaje,
+                camion: movimientoEditar.camion_destino ||
+                    movimientoEditar.camion ||
+                    'Camión',
+                vacios_enviados:
+                    movimientoEditar.vacios_enviados || '—',
+                fecha_salida:
+                    movimientoEditar.fecha_salida ||
+                    movimientoEditar.fecha_hora
+            });
+        }
+    }
 
     app.innerHTML = `
 
         ${cabeceraFormulario(
-        '🏭 REGRESO DE PLANTA'
+        modoEdicion
+            ? '✏️ EDITAR REGRESO DE PLANTA'
+            : '🏭 REGRESO DE PLANTA'
     )}
-
 
         <main class="main-content">
 
             <form id="formMovimiento">
 
-
                 <div class="form-group">
-
-                    <label>
-                        Viaje abierto
-                    </label>
+                    <label>Viaje de planta</label>
 
                     <select
                         class="form-control"
                         name="idViaje"
                         required
+                        ${modoEdicion ? 'disabled' : ''}
                     >
 
                         <option value="">
                             Selecciona el viaje
                         </option>
 
-                        ${viajes
-            .map(viaje => `
-                                    <option
-                                        value="${viaje.id_viaje}"
-                                    >
-                                        ${viaje.camion}
-                                        — enviados:
-                                        ${viaje.vacios_enviados}
-                                        — ${new Date(
-                viaje.fecha_salida
-            ).toLocaleString('es-EC')}
-                                    </option>
-                                `)
-            .join('')
-        }
+                        ${opcionesViajes.map(viaje => `
+                            <option value="${viaje.id_viaje}">
+                                ${viaje.camion}
+                                — enviados: ${viaje.vacios_enviados}
+                                — ${viaje.fecha_salida
+            ? new Date(viaje.fecha_salida).toLocaleString('es-EC')
+            : ''}
+                            </option>
+                        `).join('')}
 
                     </select>
-
                 </div>
 
-
-                ${viajes.length === 0
-
-            ? `
-                        <div class="status-bar status-warning">
-                            🟡 No hay viajes a planta abiertos.
-                        </div>
-                      `
-            : ''
-        }
-
+                ${opcionesViajes.length === 0 ? `
+                    <div class="status-bar status-warning">
+                        🟡 No hay viajes a planta abiertos.
+                    </div>
+                ` : ''}
 
                 <div class="form-group">
-
-                    <label>
-                        Cilindros llenos recibidos
-                    </label>
+                    <label>Cilindros llenos recibidos</label>
 
                     <input
                         class="form-control"
@@ -2104,26 +2083,19 @@ async function formularioRegresoPlanta() {
                         min="1"
                         step="1"
                         required
-                        ${viajes.length === 0 ? 'disabled' : ''}
+                        ${opcionesViajes.length === 0 ? 'disabled' : ''}
                     >
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Observación
-                    </label>
+                    <label>Observación</label>
 
                     <textarea
                         class="form-control"
                         name="observacion"
                         placeholder="Opcional"
                     ></textarea>
-
                 </div>
-
 
                 ${botonesFormulario()}
 
@@ -2132,49 +2104,75 @@ async function formularioRegresoPlanta() {
         </main>
     `;
 
+    const formulario =
+        document.getElementById('formMovimiento');
+
+    if (modoEdicion) {
+
+        formulario.elements.namedItem('idViaje').value =
+            movimientoEditar.id_viaje;
+
+        formulario.elements.namedItem('llenos').value =
+            movimientoEditar.llenos;
+
+        formulario.elements.namedItem('observacion').value =
+            movimientoEditar.observacion || '';
+    }
 
     conectarCancelar();
 
+    formulario.addEventListener('submit', async event => {
 
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
+        event.preventDefault();
 
-                event.preventDefault();
+        const botonEnviar = event.submitter;
 
-                const form =
-                    new FormData(event.target);
+        if (botonEnviar) {
+            botonEnviar.disabled = true;
+        }
 
-                try {
+        const form = new FormData(formulario);
 
-                    await regresoPlanta({
+        try {
 
-                        idViaje:
-                            form.get('idViaje'),
+            const datos = {
+                tipo: TIPOS_MOVIMIENTO.REGRESO_PLANTA,
+                idMovimiento: modoEdicion
+                    ? movimientoEditar.id_movimiento
+                    : null,
+                idViaje: modoEdicion
+                    ? movimientoEditar.id_viaje
+                    : form.get('idViaje'),
+                llenos: form.get('llenos'),
+                observacion: form.get('observacion')
+            };
 
-                        llenos:
-                            form.get('llenos'),
+            if (modoEdicion) {
 
-                        observacion:
-                            form.get('observacion')
+                await editarUltimoMovimiento(datos);
 
-                    });
+                mostrarExito('REGRESO DE PLANTA MODIFICADO');
 
+            } else {
 
-                    mostrarExito(
-                        'REGRESO DE PLANTA REGISTRADO'
-                    );
+                await regresoPlanta({
+                    idViaje: datos.idViaje,
+                    llenos: datos.llenos,
+                    observacion: datos.observacion
+                });
 
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
+                mostrarExito('REGRESO DE PLANTA REGISTRADO');
             }
-        );
+
+        } catch (error) {
+
+            mostrarError(error.message);
+
+            if (botonEnviar) {
+                botonEnviar.disabled = false;
+            }
+        }
+    });
 }
 
 
@@ -2182,100 +2180,53 @@ async function formularioRegresoPlanta() {
    TRASLADO
 ===================================================== */
 
-async function formularioTraslado() {
+async function formularioTraslado(movimientoEditar = null) {
+
+    const modoEdicion = Boolean(movimientoEditar);
 
     app.innerHTML = `
 
         ${cabeceraFormulario(
-        '🔄 TRASLADO ENTRE CAMIONES'
+        modoEdicion
+            ? '✏️ EDITAR TRASLADO'
+            : '🔄 TRASLADO ENTRE CAMIONES'
     )}
-
 
         <main class="main-content">
 
             <form id="formMovimiento">
 
-
                 <div class="form-group">
+                    <label>Ubicación origen</label>
 
-                    <label>
-                        Camión origen
-                    </label>
-
-                    <select
-                        class="form-control"
-                        name="origen"
-                        required
-                    >
-
-                        <option value="ROJO">
-                            Camión Rojo
-                        </option>
-
-                        <option value="BLANCO">
-                            Camión Blanco
-                        </option>
-
+                    <select class="form-control" name="origen" required>
+                        <option value="ROJO">Camión Rojo</option>
+                        <option value="BLANCO">Camión Blanco</option>
+                        <option value="CASA">Casa</option>
                     </select>
-
                 </div>
 
-
                 <div class="form-group">
+                    <label>Ubicación destino</label>
 
-                    <label>
-                        Camión destino
-                    </label>
-
-                    <select
-                        class="form-control"
-                        name="destino"
-                        required
-                    >
-
-                        <option value="BLANCO">
-                            Camión Blanco
-                        </option>
-
-                        <option value="ROJO">
-                            Camión Rojo
-                        </option>
-
+                    <select class="form-control" name="destino" required>
+                        <option value="BLANCO">Camión Blanco</option>
+                        <option value="ROJO">Camión Rojo</option>
+                        <option value="CASA">Casa</option>
                     </select>
-
                 </div>
 
-
                 <div class="form-group">
+                    <label>Tipo de cilindro</label>
 
-                    <label>
-                        Tipo de cilindro
-                    </label>
-
-                    <select
-                        class="form-control"
-                        name="tipoCilindro"
-                        required
-                    >
-
-                        <option value="LLENOS">
-                            Llenos
-                        </option>
-
-                        <option value="VACIOS">
-                            Vacíos
-                        </option>
-
+                    <select class="form-control" name="tipoCilindro" required>
+                        <option value="LLENOS">Llenos</option>
+                        <option value="VACIOS">Vacíos</option>
                     </select>
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Cantidad
-                    </label>
+                    <label>Cantidad</label>
 
                     <input
                         class="form-control"
@@ -2285,24 +2236,17 @@ async function formularioTraslado() {
                         step="1"
                         required
                     >
-
                 </div>
 
-
                 <div class="form-group">
-
-                    <label>
-                        Observación
-                    </label>
+                    <label>Observación</label>
 
                     <textarea
                         class="form-control"
                         name="observacion"
                         placeholder="Opcional"
                     ></textarea>
-
                 </div>
-
 
                 ${botonesFormulario()}
 
@@ -2311,56 +2255,313 @@ async function formularioTraslado() {
         </main>
     `;
 
+    const formulario = document.getElementById('formMovimiento');
+
+    if (modoEdicion) {
+
+        const origen =
+            movimientoEditar.ubicacion_origen ||
+            movimientoEditar.origen ||
+            movimientoEditar.camion_origen;
+
+        const destino =
+            movimientoEditar.ubicacion_destino ||
+            movimientoEditar.destino ||
+            movimientoEditar.camion_destino;
+
+        formulario.elements.namedItem('origen').value = origen;
+        formulario.elements.namedItem('destino').value = destino;
+
+        const esLlenos = Number(movimientoEditar.llenos) > 0;
+
+        formulario.elements.namedItem('tipoCilindro').value =
+            esLlenos ? 'LLENOS' : 'VACIOS';
+
+        formulario.elements.namedItem('cantidad').value =
+            esLlenos
+                ? movimientoEditar.llenos
+                : movimientoEditar.vacios;
+
+        formulario.elements.namedItem('observacion').value =
+            movimientoEditar.observacion || '';
+    }
 
     conectarCancelar();
 
+    formulario.addEventListener('submit', async event => {
 
-    document
-        .getElementById('formMovimiento')
-        .addEventListener(
-            'submit',
-            async event => {
+        event.preventDefault();
 
-                event.preventDefault();
+        const botonEnviar = event.submitter;
 
-                const form =
-                    new FormData(event.target);
+        if (botonEnviar) {
+            botonEnviar.disabled = true;
+        }
 
-                try {
+        const form = new FormData(formulario);
 
+        try {
 
-                    const tipoCilindro = form.get('tipoCilindro');
-                    const cantidad = Number(form.get('cantidad'));
+            const tipoCilindro = form.get('tipoCilindro');
+            const cantidad = Number(form.get('cantidad'));
 
-                    await trasladoCamiones({
+            const datos = {
+                tipo: TIPOS_MOVIMIENTO.TRASLADO,
+                idMovimiento: modoEdicion
+                    ? movimientoEditar.id_movimiento
+                    : null,
+                origen: form.get('origen'),
+                destino: form.get('destino'),
+                llenos: tipoCilindro === 'LLENOS' ? cantidad : 0,
+                vacios: tipoCilindro === 'VACIOS' ? cantidad : 0,
+                observacion: form.get('observacion')
+            };
 
-                        origen: form.get('origen'),
-
-                        destino: form.get('destino'),
-
-                        llenos: tipoCilindro === 'LLENOS' ? cantidad : 0,
-
-                        vacios: tipoCilindro === 'VACIOS' ? cantidad : 0,
-
-                        observacion: form.get('observacion')
-
-                    });
-
-
-                    mostrarExito(
-                        'TRASLADO REGISTRADO'
-                    );
-
-                } catch (error) {
-
-                    mostrarError(
-                        error.message
-                    );
-                }
+            if (datos.origen === datos.destino) {
+                throw new Error(
+                    'La ubicación de origen y destino no pueden ser iguales.'
+                );
             }
-        );
+
+            if (modoEdicion) {
+
+                await editarUltimoMovimiento(datos);
+                mostrarExito('TRASLADO MODIFICADO');
+
+            } else {
+
+                await trasladoCamiones({
+                    origen: datos.origen,
+                    destino: datos.destino,
+                    llenos: datos.llenos,
+                    vacios: datos.vacios,
+                    observacion: datos.observacion
+                });
+
+                mostrarExito('TRASLADO REGISTRADO');
+            }
+
+        } catch (error) {
+
+            mostrarError(error.message);
+
+            if (botonEnviar) {
+                botonEnviar.disabled = false;
+            }
+        }
+    });
 }
 
+/* =====================================================
+   CAMBIAZO
+===================================================== */
+
+async function formularioCambiazo(movimientoEditar = null) {
+
+    const inventario = await obtenerInventario();
+    const modoEdicion = Boolean(movimientoEditar);
+
+    app.innerHTML = `
+
+        <header class="app-header">
+            <h1>${modoEdicion ? 'EDITAR CAMBIAZO' : 'CAMBIAZO'}</h1>
+            <p>Reclasificación de cilindros</p>
+        </header>
+
+        <main class="main-content">
+
+            <div class="card">
+
+                <div class="card-title">
+                    Inventario disponible
+                </div>
+
+                <div id="resumenCambiazo"></div>
+
+                <div class="form-group">
+                    <label>Camión</label>
+
+                    <select id="camionCambiazo" class="form-control">
+                        <option value="ROJO">ROJO</option>
+                        <option value="BLANCO">BLANCO</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Estado actual</label>
+
+                    <select id="estadoActualCambiazo" class="form-control">
+                        <option value="llenos">Llenos</option>
+                        <option value="vacios">Vacíos</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Nuevo estado</label>
+
+                    <select id="estadoNuevoCambiazo" class="form-control">
+                        <option value="vacios">Vacíos</option>
+                        <option value="llenos">Llenos</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Cantidad</label>
+
+                    <input
+                        type="number"
+                        id="cantidadCambiazo"
+                        class="form-control"
+                        min="1"
+                        step="1"
+                        placeholder="Cantidad de cilindros"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Motivo del cambiazo</label>
+
+                    <textarea
+                        id="observacionCambiazo"
+                        class="form-control"
+                        placeholder="Describe el motivo..."
+                    ></textarea>
+                </div>
+
+                <button
+                    class="primary-button"
+                    id="btnRegistrarCambiazo"
+                >
+                    ${modoEdicion ? 'GUARDAR CAMBIOS' : 'REGISTRAR CAMBIAZO'}
+                </button>
+
+                <button
+                    class="secondary-button"
+                    id="btnCancelarCambiazo"
+                    style="margin-top:10px;"
+                >
+                    CANCELAR
+                </button>
+
+            </div>
+
+        </main>
+    `;
+
+    const camion =
+        document.getElementById('camionCambiazo');
+
+    const estadoActual =
+        document.getElementById('estadoActualCambiazo');
+
+    const estadoNuevo =
+        document.getElementById('estadoNuevoCambiazo');
+
+    const cantidad =
+        document.getElementById('cantidadCambiazo');
+
+    const observacion =
+        document.getElementById('observacionCambiazo');
+
+    const resumen =
+        document.getElementById('resumenCambiazo');
+
+    function actualizarResumen() {
+
+        const ubicacion = camion.value.toLowerCase();
+        const datos = inventario[ubicacion];
+
+        resumen.innerHTML = `
+            <p>🟢 Llenos: <strong>${datos?.llenos || 0}</strong></p>
+            <p>⚪ Vacíos: <strong>${datos?.vacios || 0}</strong></p>
+        `;
+    }
+
+    if (modoEdicion) {
+
+        camion.value =
+            movimientoEditar.ubicacion ||
+            movimientoEditar.camion_origen;
+
+        estadoActual.value =
+            String(movimientoEditar.estado_origen || '').toLowerCase();
+
+        estadoNuevo.value =
+            String(movimientoEditar.estado_nuevo || '').toLowerCase();
+
+        cantidad.value = movimientoEditar.cantidad;
+
+        observacion.value =
+            movimientoEditar.observacion || '';
+    }
+
+    camion.addEventListener('change', actualizarResumen);
+
+    actualizarResumen();
+
+    document
+        .getElementById('btnRegistrarCambiazo')
+        .addEventListener('click', async event => {
+
+            const boton = event.currentTarget;
+            boton.disabled = true;
+
+            try {
+
+                const datos = {
+                    tipo: TIPOS_MOVIMIENTO.CAMBIAZO,
+                    idMovimiento: modoEdicion
+                        ? movimientoEditar.id_movimiento
+                        : null,
+                    ubicacion: camion.value,
+                    estadoActual: estadoActual.value,
+                    estadoNuevo: estadoNuevo.value,
+                    cantidad: Number(cantidad.value),
+                    observacion: observacion.value
+                };
+
+                if (
+                    !Number.isInteger(datos.cantidad) ||
+                    datos.cantidad <= 0
+                ) {
+                    throw new Error('Ingresa una cantidad válida.');
+                }
+
+                if (datos.estadoActual === datos.estadoNuevo) {
+                    throw new Error(
+                        'El estado actual y el nuevo estado deben ser diferentes.'
+                    );
+                }
+
+                if (modoEdicion) {
+
+                    await editarUltimoMovimiento(datos);
+                    mostrarExito('CAMBIAZO MODIFICADO');
+
+                } else {
+
+                    await cambiazo({
+                        ubicacion: datos.ubicacion,
+                        estadoActual: datos.estadoActual,
+                        estadoNuevo: datos.estadoNuevo,
+                        cantidad: datos.cantidad,
+                        observacion: datos.observacion
+                    });
+
+                    mostrarExito('CAMBIAZO REGISTRADO');
+                }
+
+            } catch (error) {
+
+                mostrarError(error.message);
+                boton.disabled = false;
+            }
+        });
+
+    document
+        .getElementById('btnCancelarCambiazo')
+        .addEventListener('click', mostrarTiposMovimiento);
+}
 
 /* =====================================================
    CLIENTES
@@ -3293,7 +3494,7 @@ async function mostrarApertura() {
                             type="number"
                             id="rojoLlenos"
                             min="0"
-                            value="150"
+                            value="0"
                             required
                         >
 
@@ -3308,7 +3509,7 @@ async function mostrarApertura() {
                             type="number"
                             id="rojoVacios"
                             min="0"
-                            value="30"
+                            value="0"
                             required
                         >
 
@@ -3326,7 +3527,7 @@ async function mostrarApertura() {
                             type="number"
                             id="blancoLlenos"
                             min="0"
-                            value="100"
+                            value="0"
                             required
                         >
 
@@ -3341,31 +3542,34 @@ async function mostrarApertura() {
                             type="number"
                             id="blancoVacios"
                             min="0"
-                            value="50"
-                            required
-                        >
-
-                    </div>
-
-
-                    <h3>👥 Clientes</h3>
-
-
-                    <div class="form-group">
-
-                        <label>Pendientes</label>
-
-                        <input
-                            type="number"
-                            id="clientesPendientes"
-                            min="0"
                             value="0"
                             required
                         >
 
                     </div>
+                    <h3>🏠 Casa</h3>
 
+<div class="form-group">
+    <label>Llenos</label>
+    <input
+        type="number"
+        id="casaLlenos"
+        min="0"
+        value="0"
+        required
+    >
+</div>
 
+<div class="form-group">
+    <label>Vacíos</label>
+    <input
+        type="number"
+        id="casaVacios"
+        min="0"
+        value="0"
+        required
+    >
+</div>
                     <button
                         class="primary-button"
                         type="submit"
@@ -3435,13 +3639,17 @@ async function mostrarApertura() {
                                     'blancoVacios'
                                 ).value
                             ),
-
-                        clientesPendientes:
+                        casaLlenos:
                             Number(
-                                document.getElementById(
-                                    'clientesPendientes'
-                                ).value
+                                document.getElementById('casaLlenos').value
+                            ),
+
+                        casaVacios:
+                            Number(
+                                document.getElementById('casaVacios').value
                             )
+
+
 
                     });
 
@@ -3695,18 +3903,16 @@ async function renderReportes() {
 
                 const texto =
                     `📊 REPORTE DIARIO
-Distribuidora de cilindros
 Fecha: ${fechaTexto}
-
-*VENTAS DEL DÍA: ${vendidos}*
+*Ventas Del Día: ${vendidos}*
 
 INVENTARIO ACTUAL
 Camión Rojo: ${inventario.rojoLlenos} Llenos, ${inventario.rojoVacios} Vacíos
 Camión Blanco: ${inventario.blancoLlenos} Llenos, ${inventario.blancoVacios} Vacíos 
+Casa: ${inventario.casaLlenos} Llenos, ${inventario.casaVacios} Vacíos
+*Total: ${inventario.rojoLlenos + inventario.blancoLlenos + inventario.casaLlenos} Llenos, ${inventario.rojoVacios + inventario.blancoVacios + inventario.casaVacios} Vacíos*
 
-*Total: ${inventario.rojoLlenos + inventario.blancoLlenos} Llenos, ${inventario.rojoVacios + inventario.blancoVacios} Vacíos*
-
-VENTAS DEL DÍA
+Lista de Ventas Del Día:
 ${ventasDetalle.length
                         ? ventasDetalle.map((venta, i) =>
                             `${i + 1}. ${venta.hora} — ${venta.cliente}: ${venta.cantidad} cilindros`
@@ -3729,7 +3935,7 @@ ${pendientesOrdenados.length
                         : 'No hay pendientes asignados a clientes.'}
 
 Pendientes en clientes: ${inventario.pendientesClientes}
-TOTAL GENERAL DE CILINDROS: ${inventario.total}
+TOTAL DE CILINDROS: ${inventario.total}
 
 Sin asignar (Nuevos cilindros)
 Llenos: ${inventario.sinAsignarLlenos}
@@ -3881,7 +4087,11 @@ async function renderInventario() {
                 ${inventario.blanco.llenos || 0} llenos /
                 ${inventario.blanco.vacios || 0} vacíos
             </p>
-
+<p>
+    🏠 Casa:
+    ${inventario.casa?.llenos || 0} llenos /
+    ${inventario.casa?.vacios || 0} vacíos
+</p>
             <p>
                 👥 Clientes:
                 ${inventario.clientes.pendientes || 0}
@@ -3995,7 +4205,17 @@ async function renderInventario() {
 
         <section class="card">
 
-            <h3>Asignar a camión</h3>
+        formAsignarCamion">
+
+                <label>
+                    Camión
+                    <select id="asignarCamion">
+                        <option value="ROJO">ROJO</option>
+                        <option value="BLANCO">BLANCO</option>
+                         <option value="CASA">CASA</option>
+                    </select>
+                </label>
+    <h3>Asignar a camión</h3>
 
             <p>
                 Disponible sin asignar:
@@ -4003,16 +4223,7 @@ async function renderInventario() {
                 ${sinAsignar.vacios || 0} vacíos
             </p>
 
-            <form id="formAsignarCamion">
-
-                <label>
-                    Camión
-                    <select id="asignarCamion">
-                        <option value="ROJO">ROJO</option>
-                        <option value="BLANCO">BLANCO</option>
-                    </select>
-                </label>
-
+            <form id="
                 <label>
                     Llenos
                     <input
@@ -4249,141 +4460,3 @@ async function renderInventario() {
         );
 }
 
-async function formularioCambiazo() {
-
-    const inventario = await obtenerInventario();
-
-    app.innerHTML = `
-
-        <header class="app-header">
-            <h1>CAMBIAZO</h1>
-            <p>Reclasificación de cilindros</p>
-        </header>
-
-        <main class="main-content">
-
-            <div class="card">
-
-                <div class="card-title">
-                    Inventario disponible
-                </div>
-
-                <div id="resumenCambiazo"></div>
-
-                <div class="form-group">
-                    <label>Camión</label>
-                    <select id="camionCambiazo">
-                        <option value="ROJO">ROJO</option>
-                        <option value="BLANCO">BLANCO</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Estado actual</label>
-                    <select id="estadoActualCambiazo">
-                        <option value="llenos">Llenos</option>
-                        <option value="vacios">Vacíos</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Nuevo estado</label>
-                    <select id="estadoNuevoCambiazo">
-                        <option value="vacios">Vacíos</option>
-                        <option value="llenos">Llenos</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Cantidad</label>
-                    <input
-                        type="number"
-                        id="cantidadCambiazo"
-                        min="1"
-                        step="1"
-                        placeholder="Cantidad de cilindros"
-                    >
-                </div>
-
-                <div class="form-group">
-                    <label>Motivo del cambiazo</label>
-                    <textarea
-                        id="observacionCambiazo"
-                        placeholder="Describe el motivo..."
-                    ></textarea>
-                </div>
-
-                <button
-                    class="primary-button"
-                    id="btnRegistrarCambiazo"
-                >
-                    REGISTRAR CAMBIAZO
-                </button>
-
-                <button
-                    class="secondary-button"
-                    id="btnCancelarCambiazo"
-                    style="margin-top:10px;"
-                >
-                    CANCELAR
-                </button>
-
-            </div>
-
-        </main>
-    `;
-
-    const camion = document.getElementById('camionCambiazo');
-    const resumen = document.getElementById('resumenCambiazo');
-
-    function actualizarResumen() {
-
-        const ubicacion = camion.value.toLowerCase();
-        const datos = inventario[ubicacion];
-
-        resumen.innerHTML = `
-            <p>🟢 Llenos: <strong>${datos?.llenos || 0}</strong></p>
-            <p>⚪ Vacíos: <strong>${datos?.vacios || 0}</strong></p>
-        `;
-    }
-
-    camion.addEventListener('change', actualizarResumen);
-
-    actualizarResumen();
-
-    document
-        .getElementById('btnRegistrarCambiazo')
-        .addEventListener('click', async () => {
-
-            try {
-
-                const cantidad = Number(
-                    document.getElementById('cantidadCambiazo').value
-                );
-
-                const movimiento = await cambiazo({
-
-                    ubicacion: camion.value,
-                    estadoActual: document.getElementById('estadoActualCambiazo').value,
-                    estadoNuevo: document.getElementById('estadoNuevoCambiazo').value,
-                    cantidad,
-                    observacion: document.getElementById('observacionCambiazo').value
-
-                });
-
-                alert('Cambiazo registrado correctamente.');
-
-                await renderMovimientos();
-
-            } catch (error) {
-
-                alert(error.message);
-
-            }
-
-        });
-
-    document
-        .getElementById('btnCancelarCambiazo')
-        .addEventListener('click', mostrarTiposMovimiento);
-}
